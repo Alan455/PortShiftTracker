@@ -99,20 +99,31 @@ object DefaultCatalog {
         add(fixed("DOP_SERAF", "SeraF", 5219, AllowanceCategory.DOPPIO, 407, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAF2", "SeraF2", 6119, AllowanceCategory.DOPPIO, 408, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_G", "G", 5300, AllowanceCategory.DOPPIO, 409, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
-        add(fixed("DOP_TU_MEZZO", "TUMezzo", 3390, AllowanceCategory.MEZZO_TURNO, 410, group = "MEZZO_TURNO", tagsCsv = "MEZZO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
-        add(fixed("DOP_ON_MEZZO", "ONmezzo", 4350, AllowanceCategory.MEZZO_TURNO, 411, group = "MEZZO_TURNO", tagsCsv = "MEZZO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
+        add(fixed(
+            "DOP_TU_MEZZO", "TUMezzo", 3390, AllowanceCategory.MEZZO_TURNO, 410,
+            group = "MEZZO_TURNO",
+            basePayEffect = BasePayEffect.REPLACE_BASE,
+            turnAllowanceMultiplierBasisPoints = 5000,
+            tagsCsv = "MEZZO_TURNO",
+            performanceMask = PerformanceType.TURNO.maskBit
+        ))
+        add(fixed(
+            "DOP_ON_MEZZO", "ONmezzo", 4350, AllowanceCategory.MEZZO_TURNO, 411,
+            group = "MEZZO_TURNO",
+            basePayEffect = BasePayEffect.REPLACE_BASE,
+            turnAllowanceMultiplierBasisPoints = 5000,
+            tagsCsv = "MEZZO_TURNO",
+            performanceMask = PerformanceType.TURNO.maskBit
+        ))
 
         // ALTRE VOCI ECONOMICHE riportate nella parte inferiore della tabella.
         // Turno base è gestito nel profilo del lavoratore per non sommarlo due volte.
-        add(fixed("ALT_BUON_PASTO", "BuonPasto", 500, AllowanceCategory.ALTRE_VOCI, 500))
-        add(fixed("ALT_CRAL", "CRAL", 400, AllowanceCategory.ALTRE_VOCI, 501))
         add(fixed("ALT_FISIOS", "Fisios", 3105, AllowanceCategory.ALTRE_VOCI, 502))
         add(fixed("ALT_FERIE", "Ferie", 7900, AllowanceCategory.ALTRE_VOCI, 503, group = "SOSTITUISCE_BASE", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("ALT_MALATTIA", "Malattia", 6320, AllowanceCategory.ALTRE_VOCI, 504, group = "SOSTITUISCE_BASE", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("ALT_IMA", "IMA", 5230, AllowanceCategory.ALTRE_VOCI, 505, group = "SOSTITUISCE_BASE", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("ALT_MEZZA_IMA", "Mezza IMA", 2615, AllowanceCategory.ALTRE_VOCI, 5051, group = "SOSTITUISCE_BASE", turnAllowanceMultiplierBasisPoints = 5000, recommendedWithAnyTagCsv = "MEZZO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("ALT_POLIVALENZA", "Polivalenza", 852, AllowanceCategory.ALTRE_VOCI, 507, applicationMode = AllowanceApplicationMode.AUTO, autoTrigger = AllowanceAutoTrigger.WHEN_TURNO_SELECTED, performanceMask = PerformanceType.TURNO.maskBit))
-        add(fixed("ALT_MOD_DOPPIO", "Mod.Doppio", 2000, AllowanceCategory.ALTRE_VOCI, 508))
         add(fixed("ALT_GIORNALIERO_87", "Giornaliero", 8700, AllowanceCategory.ALTRE_VOCI, 509))
         add(fixed("ALT_CONGEDI_LUI", "Congedi lui", 0, AllowanceCategory.ALTRE_VOCI, 510, enabled = false))
         add(fixed("ALT_CONGEDI_LEI", "Congedi lei", 0, AllowanceCategory.ALTRE_VOCI, 511, enabled = false))

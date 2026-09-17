@@ -81,6 +81,29 @@ class AllowanceCalculatorTest {
         performanceMask = PerformanceType.TURNO.maskBit
     )
 
+    private val sera2 = AllowanceRule(
+        id = 7,
+        name = "Sera2",
+        code = "SERA2",
+        calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+        value = 1326,
+        category = AllowanceCategory.TURNO,
+        applicationMode = AllowanceApplicationMode.MANUAL,
+        performanceMask = PerformanceType.TURNO.maskBit
+    )
+    private val tuMezzo = AllowanceRule(
+        id = 8,
+        name = "TUMezzo",
+        code = "DOP_TU_MEZZO",
+        calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+        value = 3390,
+        category = AllowanceCategory.MEZZO_TURNO,
+        applicationMode = AllowanceApplicationMode.MANUAL,
+        basePayEffect = BasePayEffect.REPLACE_BASE,
+        turnAllowanceMultiplierBasisPoints = 5000,
+        performanceMask = PerformanceType.TURNO.maskBit
+    )
+
     private val rules = listOf(turnoNotte, doppioSera, polivalenza, area, disagio, mezzaIma)
 
     @Test
@@ -95,6 +118,20 @@ class AllowanceCalculatorTest {
         assertEquals(6780, pay.basePayCents)
         assertTrue(pay.allowanceLines.any { it.name == "Polivalenza" && it.amountCents == 852L })
         assertEquals(10873, pay.totalPayCents)
+    }
+
+    @Test
+    fun tuMezzoSostituisceBaseEDimezzaSoloIndennitaTurno() {
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.TURNO, "2026-09-17T18:00:00", "2026-09-17T21:00:00"),
+            listOf(sera2, tuMezzo),
+            setOf(7, 8)
+        )
+
+        assertEquals(3390, pay.basePayCents)
+        assertTrue(pay.allowanceLines.any { it.name == "Sera2" && it.amountCents == 663L })
+        assertEquals(4053, pay.totalPayCents)
     }
 
     @Test

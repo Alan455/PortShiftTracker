@@ -23,6 +23,12 @@ class QuickShiftModeTest {
     }
 
     @Test
+    fun giornaliero_is_available_with_the_other_quick_shifts() {
+        assertEquals("G", resolveQuickShift(QuickShiftKind.GIORNALIERO, LocalDate.of(2026, 9, 18)).ruleCode)
+        assertEquals("G", resolveQuickShift(QuickShiftKind.GIORNALIERO, LocalDate.of(2026, 9, 20)).ruleCode)
+    }
+
+    @Test
     fun ravenna_patron_and_port_november_fourth_are_festive() {
         assertEquals(PortDayClass.FESTIVO, portDayClass(LocalDate.of(2026, 7, 23)))
         assertEquals(PortDayClass.FESTIVO, portDayClass(LocalDate.of(2026, 11, 4)))

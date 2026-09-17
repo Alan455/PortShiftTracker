@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +38,7 @@ internal fun EntryModeSelector(
     onQuick: () -> Unit,
     onDetailed: () -> Unit
 ) {
+    val quickSelected = quickMode && quickEnabled
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White),
@@ -45,24 +46,31 @@ internal fun EntryModeSelector(
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Modalità inserimento", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = quickMode && quickEnabled,
-                    onClick = onQuick,
-                    enabled = quickEnabled,
-                    label = { Text("5 turni", textAlign = TextAlign.Center) },
-                    modifier = Modifier.weight(1f)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Dettagliato",
+                    fontWeight = if (!quickSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (!quickSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                FilterChip(
-                    selected = !quickMode || !quickEnabled,
-                    onClick = onDetailed,
-                    label = { Text("Dettagliato", textAlign = TextAlign.Center) },
-                    modifier = Modifier.weight(1f)
+                Switch(
+                    checked = quickSelected,
+                    enabled = quickEnabled,
+                    onCheckedChange = { checked -> if (checked) onQuick() else onDetailed() },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                Text(
+                    "5 turni",
+                    fontWeight = if (quickSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (quickSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Text(
                 if (quickEnabled)
-                    "5 turni sceglie automaticamente l'indennità di turno in base alla data; Dettagliato mantiene la selezione completa."
+                    "Con 5 turni scegli il turno con un tocco: la data è quella selezionata nel calendario e data/orari non vengono mostrati."
                 else
                     "La modalità 5 turni è disponibile per il Turno normale. Doppio e Mezzo Doppio restano in modalità dettagliata.",
                 style = MaterialTheme.typography.bodySmall,
@@ -126,7 +134,8 @@ internal fun QuickShiftPanel(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                kinds.drop(3).forEach { kind ->
+                val remainingKinds = kinds.drop(3)
+                remainingKinds.forEach { kind ->
                     QuickShiftTile(
                         kind = kind,
                         date = date,
@@ -137,7 +146,9 @@ internal fun QuickShiftPanel(
                         onClick = { onKindSelected(kind) }
                     )
                 }
-                Spacer(Modifier.weight(1f))
+                repeat((3 - remainingKinds.size).coerceAtLeast(0)) {
+                    Spacer(Modifier.weight(1f))
+                }
             }
 
             selectedKind?.let { kind ->

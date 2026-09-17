@@ -48,6 +48,14 @@ class PortShiftApplication : Application() {
 
         // Aggiunge soltanto le voci mancanti. Le modifiche dell'utente restano intatte.
         DefaultCatalog.rules().forEach { db.allowanceRuleDao().insertIfMissing(it) }
+
+        // TUMezzo/ONmezzo sostituiscono il turno intero: manteniamo l'importo
+        // eventualmente personalizzato, ma correggiamo il comportamento anche sui DB esistenti.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET basePayEffect = 'REPLACE_BASE', " +
+                "turnAllowanceMultiplierBasisPoints = 5000 " +
+                "WHERE code IN ('DOP_TU_MEZZO','DOP_ON_MEZZO')"
+        )
     }
 
     companion object {

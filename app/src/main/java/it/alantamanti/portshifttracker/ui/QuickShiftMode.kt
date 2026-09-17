@@ -12,7 +12,8 @@ internal enum class QuickShiftKind(val label: String) {
     POMERIGGIO("Pomeriggio"),
     SERA("Sera"),
     SERA2("Sera2"),
-    NOTTE("Notte")
+    NOTTE("Notte"),
+    GIORNALIERO("Giornaliero")
 }
 
 internal enum class PortDayClass(val label: String) {
@@ -70,6 +71,7 @@ internal fun resolveQuickShift(
             else -> "SERA2" to "Sera2"
         }
         QuickShiftKind.NOTTE -> if (festiveForAllowance) "NOTTEF" to "NotteF" else "NOTTE" to "Notte"
+        QuickShiftKind.GIORNALIERO -> "G" to "G"
     }
 
     val prefix = if (overrideClass != null) "Calendario speciale: " else ""
@@ -110,6 +112,7 @@ internal fun inferQuickShiftKind(selectedIds: Set<Long>, rules: List<AllowanceRu
         "SERA", "SERAS", "SERAF" -> QuickShiftKind.SERA
         "SERA2", "SERAS2", "SERAF2" -> QuickShiftKind.SERA2
         "NOTTE", "NOTTEF" -> QuickShiftKind.NOTTE
+        "G" -> QuickShiftKind.GIORNALIERO
         else -> null
     }
 }

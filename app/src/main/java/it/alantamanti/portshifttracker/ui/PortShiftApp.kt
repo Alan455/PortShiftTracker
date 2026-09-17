@@ -101,6 +101,10 @@ private val PortPurple = Color(0xFF7357D9)
 private val PortOrange = Color(0xFFE17932)
 private val PortGreen = Color(0xFF159A80)
 
+// Voci ritirate: restano nel DB per non alterare eventuali storico/backup,
+// ma non sono più selezionabili né mostrate nell'editor delle indennità.
+private val retiredRuleCodes = setOf("ALT_BUON_PASTO", "ALT_CRAL", "ALT_MOD_DOPPIO")
+
 private val portColorScheme = lightColorScheme(
     primary = PortBlue,
     onPrimary = Color.White,
@@ -220,6 +224,9 @@ private fun HomeScreen(repository: PortRepository) {
     val dayRows = rowsByDate[selectedDate].orEmpty().sortedBy { it.shift.startEpochMillis }
     val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
     val monthTotal = monthRows.sumOf { it.pay.totalPayCents }
+    val ruleUsageCounts = remember(rows) {
+        rows.flatMap { it.selectedRules }.groupingBy { it.id }.eachCount()
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -333,9 +340,12 @@ private fun HomeScreen(repository: PortRepository) {
             initialDate = editorDate!!,
             initialShift = null,
             initialSelectedIds = emptySet(),
+            ruleUsageCounts = ruleUsageCounts,
             onDismiss = { editorDate = null },
-            onSave = { shift, selectedIds ->
-                scope.launch { repository.addShiftWithSelections(shift, selectedIds) }
+            onSave = { shifts, selectedIds ->
+                scope.launch {
+                    shifts.forEach { shift -> repository.addShiftWithSelections(shift, selectedIds) }
+                }
                 editorDate = null
             }
         )
@@ -348,9 +358,12 @@ private fun HomeScreen(repository: PortRepository) {
             initialDate = rowDate(row),
             initialShift = row.shift,
             initialSelectedIds = row.selectedRules.map { it.id }.toSet(),
+            ruleUsageCounts = ruleUsageCounts,
             onDismiss = { editingRow = null },
-            onSave = { shift, selectedIds ->
-                scope.launch { repository.updateShiftWithSelections(shift, selectedIds) }
+            onSave = { shifts, selectedIds ->
+                shifts.firstOrNull()?.let { shift ->
+                    scope.launch { repository.updateShiftWithSelections(shift, selectedIds) }
+                }
                 editingRow = null
             }
         )
@@ -653,8 +666,9 @@ private fun ShiftEditorScreen(
     initialDate: LocalDate,
     initialShift: ShiftEntity?,
     initialSelectedIds: Set<Long>,
+    ruleUsageCounts: Map<Long, Int>,
     onDismiss: () -> Unit,
-    onSave: (ShiftEntity, Set<Long>) -> Unit
+    onSave: (List<ShiftEntity>, Set<Long>) -> Unit
 ) {
     val context = LocalContext.current
     val initialZone = ZoneId.of(initialShift?.zoneId ?: "Europe/Rome")
@@ -671,6 +685,7 @@ private fun ShiftEditorScreen(
     var notes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes.orEmpty()) }
     var performanceType by remember(initialShift?.id) { mutableStateOf(initialShift?.performanceType ?: PerformanceType.TURNO) }
     var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
+    var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
     var error by remember { mutableStateOf<String?>(null) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
@@ -687,10 +702,14 @@ private fun ShiftEditorScreen(
 
     val manualRules = rules.filter {
         it.enabled &&
+            it.code !in retiredRuleCodes &&
             it.applicationMode == AllowanceApplicationMode.MANUAL &&
             (it.performanceMask and performanceType.maskBit) != 0
     }
     val selectedRules = manualRules.filter { it.id in selectedIds }
+    val absenceRule = selectedRules.firstOrNull { it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" }
+    val rangeEnabled = initialShift == null && absenceRule != null
+    val effectiveRangeEnd = if (rangeEndDate.isBefore(editorDate)) editorDate else rangeEndDate
     val selectedTags = selectedRules.flatMap { parseTags(it.tagsCsv) }.toSet()
     val relationWarnings = selectedRules.mapNotNull { rule ->
         val recommendedTags = parseTags(rule.recommendedWithAnyTagCsv)
@@ -800,13 +819,25 @@ private fun ShiftEditorScreen(
                                         error = "Controlla data e orari: la fine deve essere successiva all'inizio."
                                     } else {
                                         error = null
-                                        onSave(shift, selectedIds)
+                                        val shiftsToSave = if (rangeEnabled) {
+                                            expandShiftRange(shift, effectiveRangeEnd)
+                                        } else {
+                                            listOf(shift)
+                                        }
+                                        onSave(shiftsToSave, selectedIds)
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(14.dp)
                             ) {
-                                Text(if (initialShift == null) "Salva prestazione" else "Salva modifiche", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    when {
+                                        initialShift != null -> "Salva modifiche"
+                                        rangeEnabled -> "Salva periodo ${absenceRule?.name.orEmpty()}"
+                                        else -> "Salva prestazione"
+                                    },
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -946,9 +977,10 @@ private fun ShiftEditorScreen(
                         }
                     }
 
-                    item {
-                        val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
-                        val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
+                    if (!effectiveQuickMode) {
+                        item {
+                            val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
+                            val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
 
                         EditorSectionCard(title = "2. Data e orario") {
                             PickerField(
@@ -1067,6 +1099,7 @@ private fun ShiftEditorScreen(
                             }
                         }
                     }
+                    }
 
                     item {
                         EditorSectionCard(title = "Mansione e note") {
@@ -1113,7 +1146,7 @@ private fun ShiftEditorScreen(
 
                     item {
                         SectionHeader(
-                            title = "3. Indennità",
+                            title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
                             trailing = if (selectedIds.isEmpty()) "Nessuna" else "${selectedIds.size} selezionate"
                         )
                     }
@@ -1129,10 +1162,44 @@ private fun ShiftEditorScreen(
                                     rules = categoryRules,
                                     selectedIds = selectedIds,
                                     performanceType = performanceType,
+                                    usageCounts = ruleUsageCounts,
                                     onToggle = { rule, checked ->
                                         selectedIds = toggleRule(selectedIds, rule, manualRules, checked)
                                     }
                                 )
+                            }
+                        }
+                    }
+
+                    if (initialShift == null) {
+                        absenceRule?.let { selectedAbsence ->
+                            item {
+                                EditorSectionCard(title = "${selectedAbsence.name}: periodo") {
+                                    Text(
+                                        "Dal ${italianTitle(editorDate.format(shortDayFormatter))}. Scegli l'ultimo giorno del periodo.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    PickerField(
+                                        label = "Fino al",
+                                        value = italianTitle(effectiveRangeEnd.format(shortDayFormatter)),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = {
+                                            val current = effectiveRangeEnd
+                                            DatePickerDialog(
+                                                context,
+                                                { _, year, month, day ->
+                                                    val picked = LocalDate.of(year, month + 1, day)
+                                                    rangeEndDate = if (picked.isBefore(editorDate)) editorDate else picked
+                                                },
+                                                current.year,
+                                                current.monthValue - 1,
+                                                current.dayOfMonth
+                                            ).show()
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1261,9 +1328,19 @@ private fun AllowanceCategoryCard(
     rules: List<AllowanceRuleEntity>,
     selectedIds: Set<Long>,
     performanceType: PerformanceType,
+    usageCounts: Map<Long, Int>,
     onToggle: (AllowanceRuleEntity, Boolean) -> Unit
 ) {
-    val selectedCount = rules.count { it.id in selectedIds }
+    val orderedRules = rules.sortedWith(
+        compareByDescending<AllowanceRuleEntity> { usageCounts[it.id] ?: 0 }
+            .thenBy { it.priority }
+            .thenBy { it.name }
+    )
+    val selectedCount = orderedRules.count { it.id in selectedIds }
+    val horizontal = category == AllowanceCategory.AVVIAMENTO ||
+        category == AllowanceCategory.DISAGIO ||
+        category == AllowanceCategory.AREA
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1312,61 +1389,90 @@ private fun AllowanceCategoryCard(
                 else -> Unit
             }
 
-            rules.chunked(2).forEach { pair ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pair.forEach { rule ->
-                        val checked = rule.id in selectedIds
-                        val shape = RoundedCornerShape(14.dp)
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 76.dp)
-                                .border(
-                                    width = if (checked) 2.dp else 1.dp,
-                                    color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                    shape = shape
-                                )
-                                .clickable { onToggle(rule, !checked) },
-                            shape = shape,
-                            color = if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                        ) {
-                            Column(
-                                Modifier.padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        rule.name,
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = if (checked) FontWeight.Bold else FontWeight.SemiBold
-                                    )
-                                    if (checked) {
-                                        Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                Text(
-                                    ruleValueLabel(rule, performanceType),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                                if (checked) {
-                                    Text(
-                                        ruleDescription(rule),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
+            if (horizontal) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(orderedRules, key = { it.id }) { rule ->
+                        AllowanceRuleTile(
+                            rule = rule,
+                            checked = rule.id in selectedIds,
+                            performanceType = performanceType,
+                            modifier = Modifier.width(156.dp),
+                            onToggle = onToggle
+                        )
                     }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
+            } else {
+                orderedRules.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pair.forEach { rule ->
+                            AllowanceRuleTile(
+                                rule = rule,
+                                checked = rule.id in selectedIds,
+                                performanceType = performanceType,
+                                modifier = Modifier.weight(1f),
+                                onToggle = onToggle
+                            )
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AllowanceRuleTile(
+    rule: AllowanceRuleEntity,
+    checked: Boolean,
+    performanceType: PerformanceType,
+    modifier: Modifier,
+    onToggle: (AllowanceRuleEntity, Boolean) -> Unit
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Surface(
+        modifier = modifier
+            .heightIn(min = 78.dp)
+            .border(
+                width = if (checked) 2.dp else 1.dp,
+                color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                shape = shape
+            )
+            .clickable { onToggle(rule, !checked) },
+        shape = shape,
+        color = if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    rule.name,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (checked) FontWeight.Bold else FontWeight.SemiBold
+                )
+                if (checked) {
+                    Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(
+                ruleValueLabel(rule, performanceType),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+            if (checked) {
+                Text(
+                    ruleDescription(rule),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1560,7 +1666,8 @@ private fun RulesScreen(repository: PortRepository) {
         )
     }
     val filteredRules = rules.filter {
-        it.category in categories &&
+        it.code !in retiredRuleCodes &&
+            it.category in categories &&
             (search.isBlank() || it.name.contains(search, ignoreCase = true) || it.code.contains(search, ignoreCase = true))
     }
 
@@ -1987,6 +2094,28 @@ private fun parseShiftOrNull(
         performanceType = performanceType
     )
 }.getOrNull()
+
+private fun expandShiftRange(base: ShiftEntity, endDate: LocalDate): List<ShiftEntity> {
+    val zone = ZoneId.of(base.zoneId)
+    val start = Instant.ofEpochMilli(base.startEpochMillis).atZone(zone)
+    val end = Instant.ofEpochMilli(base.endEpochMillis).atZone(zone)
+    val firstDate = start.toLocalDate()
+    val lastDate = if (endDate.isBefore(firstDate)) firstDate else endDate
+
+    val result = mutableListOf<ShiftEntity>()
+    var offset = 0L
+    var date = firstDate
+    while (!date.isAfter(lastDate)) {
+        result += base.copy(
+            id = 0,
+            startEpochMillis = start.plusDays(offset).toInstant().toEpochMilli(),
+            endEpochMillis = end.plusDays(offset).toInstant().toEpochMilli()
+        )
+        offset += 1
+        date = date.plusDays(1)
+    }
+    return result
+}
 
 private fun performanceInfo(worker: WorkerEntity, type: PerformanceType): String = when (type) {
     PerformanceType.TURNO ->
