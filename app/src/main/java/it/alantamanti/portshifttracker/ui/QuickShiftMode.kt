@@ -32,15 +32,15 @@ internal data class QuickShiftResolution(
 
 /**
  * Calendar used by the quick-entry mode for Ravenna port work.
- * Sundays are festive. It also includes the recurring Italian holidays,
- * Ravenna's patron saint (23 July), 4 November as provided by the port CCNL,
- * and St Francis from 2026. Easter Monday is calculated each year.
- * Christmas Eve and Holy Saturday are treated as semi-festive for the
- * afternoon/evening quick shifts.
+ * An optional override comes from the editable "Calendario speciale" and always wins.
  */
-internal fun resolveQuickShift(kind: QuickShiftKind, date: LocalDate): QuickShiftResolution {
-    val baseClass = portDayClass(date)
-    val semiFestiveAfternoon = isPortSemiFestive(date) && kind in setOf(
+internal fun resolveQuickShift(
+    kind: QuickShiftKind,
+    date: LocalDate,
+    overrideClass: PortDayClass? = null
+): QuickShiftResolution {
+    val baseClass = overrideClass ?: portDayClass(date)
+    val semiFestiveAfternoon = overrideClass == null && isPortSemiFestive(date) && kind in setOf(
         QuickShiftKind.POMERIGGIO,
         QuickShiftKind.SERA,
         QuickShiftKind.SERA2
@@ -72,11 +72,12 @@ internal fun resolveQuickShift(kind: QuickShiftKind, date: LocalDate): QuickShif
         QuickShiftKind.NOTTE -> if (festiveForAllowance) "NOTTEF" to "NotteF" else "NOTTE" to "Notte"
     }
 
-    val explanation = when (effectiveClass) {
-        PortDayClass.FERIALE -> "Giorno feriale: viene selezionata automaticamente $compactCode."
-        PortDayClass.SABATO -> "Sabato: viene selezionata automaticamente $compactCode."
-        PortDayClass.FESTIVO -> "Giorno festivo: viene selezionata automaticamente $compactCode."
-        PortDayClass.SEMIFESTIVO -> "Semifestivo portuale nel pomeriggio: viene applicata la variante festiva $compactCode."
+    val prefix = if (overrideClass != null) "Calendario speciale: " else ""
+    val explanation = prefix + when (effectiveClass) {
+        PortDayClass.FERIALE -> "giorno feriale, viene selezionata automaticamente $compactCode."
+        PortDayClass.SABATO -> "sabato, viene selezionata automaticamente $compactCode."
+        PortDayClass.FESTIVO -> "giorno festivo, viene selezionata automaticamente $compactCode."
+        PortDayClass.SEMIFESTIVO -> "semifestivo, viene applicata la variante festiva $compactCode."
     }
     return QuickShiftResolution(kind, effectiveClass, ruleCode, compactCode, explanation)
 }
@@ -85,9 +86,10 @@ internal fun applyQuickTurnSelection(
     currentIds: Set<Long>,
     rules: List<AllowanceRuleEntity>,
     kind: QuickShiftKind,
-    date: LocalDate
+    date: LocalDate,
+    overrideClass: PortDayClass? = null
 ): Set<Long> {
-    val resolution = resolveQuickShift(kind, date)
+    val resolution = resolveQuickShift(kind, date, overrideClass)
     val target = rules.firstOrNull {
         it.enabled && it.code == resolution.ruleCode && (it.performanceMask and PerformanceType.TURNO.maskBit) != 0
     } ?: return currentIds
@@ -127,10 +129,10 @@ private fun isPortHoliday(date: LocalDate): Boolean {
         MonthDay.of(4, 25),
         MonthDay.of(5, 1),
         MonthDay.of(6, 2),
-        MonthDay.of(7, 23), // Sant'Apollinare, patrono di Ravenna
+        MonthDay.of(7, 23),
         MonthDay.of(8, 15),
         MonthDay.of(11, 1),
-        MonthDay.of(11, 4), // festivita prevista dal CCNL porti
+        MonthDay.of(11, 4),
         MonthDay.of(12, 8),
         MonthDay.of(12, 25),
         MonthDay.of(12, 26)
