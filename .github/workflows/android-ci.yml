@@ -21,7 +21,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/portshift"
-          unzip -q ci/PortShiftTracker_v0.7.zip -d "$RUNNER_TEMP/portshift"
+          cat ci/chunks/*.b64 > "$RUNNER_TEMP/PortShiftTracker_v0.7.b64"
+          base64 -d "$RUNNER_TEMP/PortShiftTracker_v0.7.b64" > "$RUNNER_TEMP/PortShiftTracker_v0.7.zip"
+          unzip -t "$RUNNER_TEMP/PortShiftTracker_v0.7.zip"
+          unzip -q "$RUNNER_TEMP/PortShiftTracker_v0.7.zip" -d "$RUNNER_TEMP/portshift"
           echo "PROJECT_DIR=$RUNNER_TEMP/portshift/PortShiftTracker_v0.7" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
