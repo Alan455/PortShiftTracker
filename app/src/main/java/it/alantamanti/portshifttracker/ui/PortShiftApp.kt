@@ -217,95 +217,108 @@ private fun HomeScreen(repository: PortRepository) {
     val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
     val monthTotal = monthRows.sumOf { it.pay.totalPayCents }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            MonthCalendarCard(
-                month = month,
-                selectedDate = selectedDate,
-                rowsByDate = rowsByDate,
-                onPrevious = {
-                    month = month.minusMonths(1)
-                    selectedDate = clampDateToMonth(selectedDate, month)
-                },
-                onNext = {
-                    month = month.plusMonths(1)
-                    selectedDate = clampDateToMonth(selectedDate, month)
-                },
-                onDateSelected = { selectedDate = it }
-            )
-        }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard(
-                    title = "Totale mese",
-                    value = money(monthTotal),
-                    modifier = Modifier.weight(1f)
-                )
-                MetricCard(
-                    title = "Prestazioni",
-                    value = monthRows.size.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        item {
-            SectionHeader(
-                title = italianTitle(selectedDate.format(dayTitleFormatter)),
-                trailing = if (dayRows.isEmpty()) "Nessuna prestazione" else "${dayRows.size} prestaz."
-            )
-        }
-
-        if (dayRows.isEmpty()) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 16.dp,
+                top = 12.dp,
+                end = 16.dp,
+                bottom = 92.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             item {
-                EmptyDayCard(onAdd = { editorDate = selectedDate })
-            }
-        } else {
-            items(dayRows, key = { it.shift.id }) { row ->
-                ShiftCompactCard(
-                    row = row,
-                    onDetails = { detailRow = row },
-                    onEdit = { editingRow = row }
+                MonthCalendarCard(
+                    month = month,
+                    selectedDate = selectedDate,
+                    rowsByDate = rowsByDate,
+                    onPrevious = {
+                        month = month.minusMonths(1)
+                        selectedDate = clampDateToMonth(selectedDate, month)
+                    },
+                    onNext = {
+                        month = month.plusMonths(1)
+                        selectedDate = clampDateToMonth(selectedDate, month)
+                    },
+                    onDateSelected = { selectedDate = it }
                 )
             }
+
             item {
-                Button(
-                    onClick = { editorDate = selectedDate },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = workers.isNotEmpty()
-                ) {
-                    Text("＋  Aggiungi prestazione")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MetricCard(
+                        title = "Totale mese",
+                        value = money(monthTotal),
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricCard(
+                        title = "Prestazioni",
+                        value = monthRows.size.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
+
             item {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                SectionHeader(
+                    title = italianTitle(selectedDate.format(dayTitleFormatter)),
+                    trailing = if (dayRows.isEmpty()) "Nessuna prestazione" else "${dayRows.size} prestaz."
+                )
+            }
+
+            if (dayRows.isEmpty()) {
+                item { EmptyDayCard() }
+            } else {
+                items(dayRows, key = { it.shift.id }) { row ->
+                    ShiftCompactCard(
+                        row = row,
+                        onDetails = { detailRow = row },
+                        onEdit = { editingRow = row }
+                    )
+                }
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Totale giornata", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            money(dayRows.sumOf { it.pay.totalPayCents }),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            Modifier.padding(horizontal = 16.dp, vertical = 13.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Totale giornata", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                money(dayRows.sumOf { it.pay.totalPayCents }),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
         }
 
-        item { Spacer(Modifier.height(8.dp)) }
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+            tonalElevation = 3.dp
+        ) {
+            Button(
+                onClick = { editorDate = selectedDate },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                enabled = workers.isNotEmpty(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("＋  Aggiungi prestazione", fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 
     val worker = workers.firstOrNull()
@@ -365,7 +378,9 @@ private fun MonthCalendarCard(
     onDateSelected: (LocalDate) -> Unit
 ) {
     val firstOffset = month.atDay(1).dayOfWeek.value - 1
-    val cells = (0 until 42).map { index ->
+    val requiredCells = firstOffset + month.lengthOfMonth()
+    val weekCount = (requiredCells + 6) / 7
+    val cells = (0 until weekCount * 7).map { index ->
         val day = index - firstOffset + 1
         if (day in 1..month.lengthOfMonth()) month.atDay(day) else null
     }
@@ -374,21 +389,31 @@ private fun MonthCalendarCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = onPrevious) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
+                Box(
+                    modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onPrevious),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("‹", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                }
                 Text(
                     italianTitle(month.format(monthFormatter)),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                TextButton(onClick = onNext) { Text("›", style = MaterialTheme.typography.headlineSmall) }
+                Box(
+                    modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onNext),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                }
             }
 
             Row(Modifier.fillMaxWidth()) {
@@ -407,7 +432,7 @@ private fun MonthCalendarCard(
                 Row(Modifier.fillMaxWidth()) {
                     week.forEach { date ->
                         Box(
-                            modifier = Modifier.weight(1f).height(46.dp),
+                            modifier = Modifier.weight(1f).height(38.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             if (date != null) {
@@ -436,7 +461,7 @@ private fun CalendarDay(
     val today = date == LocalDate.now()
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
-            modifier = Modifier.size(32.dp).clickable(onClick = onClick),
+            modifier = Modifier.size(28.dp).clickable(onClick = onClick),
             shape = CircleShape,
             color = when {
                 selected -> MaterialTheme.colorScheme.primary
@@ -447,7 +472,7 @@ private fun CalendarDay(
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = if (selected || today) FontWeight.Bold else FontWeight.Normal,
                     color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
                 )
@@ -457,7 +482,7 @@ private fun CalendarDay(
             dayRows.take(3).forEach { row ->
                 Box(
                     Modifier
-                        .size(4.dp)
+                        .size(3.5.dp)
                         .clip(CircleShape)
                         .background(performanceColor(row.shift.performanceType))
                 )
@@ -467,24 +492,23 @@ private fun CalendarDay(
 }
 
 @Composable
-private fun EmptyDayCard(onAdd: () -> Unit) {
+private fun EmptyDayCard() {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(
-            Modifier.padding(20.dp).fillMaxWidth(),
+            Modifier.padding(horizontal = 18.dp, vertical = 16.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text("Nessuna prestazione registrata", fontWeight = FontWeight.SemiBold)
             Text(
-                "Aggiungi un turno, un doppio o un mezzo doppio per questa giornata.",
+                "Usa il pulsante qui sotto per aggiungere un turno, un doppio o un mezzo doppio.",
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Button(onClick = onAdd) { Text("＋  Aggiungi prestazione") }
         }
     }
 }
