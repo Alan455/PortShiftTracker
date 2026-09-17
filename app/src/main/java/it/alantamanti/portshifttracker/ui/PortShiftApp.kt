@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
+import it.alantamanti.portshifttracker.data.local.AppFeatureStore
 import it.alantamanti.portshifttracker.data.local.ShiftEntity
 import it.alantamanti.portshifttracker.data.local.WorkerEntity
 import it.alantamanti.portshifttracker.data.repository.PortRepository
@@ -435,7 +436,7 @@ private fun MonthCalendarCard(
                 Row(Modifier.fillMaxWidth()) {
                     week.forEach { date ->
                         Box(
-                            modifier = Modifier.weight(1f).height(38.dp),
+                            modifier = Modifier.weight(1f).height(44.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             if (date != null) {
@@ -481,15 +482,13 @@ private fun CalendarDay(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            dayRows.take(3).forEach { row ->
-                Box(
-                    Modifier
-                        .size(3.5.dp)
-                        .clip(CircleShape)
-                        .background(performanceColor(row.shift.performanceType))
-                )
-            }
+        if (dayRows.isNotEmpty()) {
+            Text(
+                dayRows.take(2).joinToString(" ") { calendarShiftCode(it) },
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -676,11 +675,13 @@ private fun ShiftEditorScreen(
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
     val uiPrefs = remember(context) { context.getSharedPreferences("portshift_ui", 0) }
+    val featureStore = remember(context) { AppFeatureStore(context) }
     var quickMode by remember(initialShift?.id) { mutableStateOf(uiPrefs.getBoolean("quick_shift_mode", true)) }
     var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
         mutableStateOf(inferQuickShiftKind(initialSelectedIds, rules))
     }
     val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
+    val specialOverrideClass = featureStore.specialDay(editorDate)?.dayClass?.toPortDayClass()
     val effectiveQuickMode = quickMode && performanceType == PerformanceType.TURNO
     val calculator = remember { AllowanceCalculator() }
 
@@ -703,6 +704,7 @@ private fun ShiftEditorScreen(
     val suggestedCompanions = manualRules.filter { rule ->
         rule.id !in selectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
+    val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in selectedIds })
 
     val draftShift = remember(startText, endText, role, notes, performanceType, initialShift?.id) {
         parseShiftOrNull(
@@ -888,7 +890,7 @@ private fun ShiftEditorScreen(
                                 val inferred = inferQuickShiftKind(selectedIds, rules)
                                 if (inferred != null) quickKind = inferred
                                 quickKind?.let { kind ->
-                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate)
+                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate, specialOverrideClass)
                                 }
                             },
                             onDetailed = {
@@ -904,9 +906,10 @@ private fun ShiftEditorScreen(
                                 date = editorDate,
                                 rules = rules,
                                 selectedKind = quickKind,
+                                overrideClass = specialOverrideClass,
                                 onKindSelected = { kind ->
                                     quickKind = kind
-                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate)
+                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate, specialOverrideClass)
                                 }
                             )
                         }
@@ -967,11 +970,14 @@ private fun ShiftEditorScreen(
                                             endText = newStart.plus(duration).format(editFormatter)
                                             if (quickMode && performanceType == PerformanceType.TURNO) {
                                                 quickKind?.let { kind ->
+                                                    val newDate = newStart.toLocalDate()
+                                                    val override = featureStore.specialDay(newDate)?.dayClass?.toPortDayClass()
                                                     selectedIds = applyQuickTurnSelection(
                                                         selectedIds,
                                                         rules,
                                                         kind,
-                                                        newStart.toLocalDate()
+                                                        newDate,
+                                                        override
                                                     )
                                                 }
                                             }
@@ -1093,6 +1099,19 @@ private fun ShiftEditorScreen(
                     }
 
                     item {
+                        PresetQuickBar(
+                            rules = rules,
+                            selectedIds = selectedIds,
+                            role = role,
+                            performanceType = performanceType,
+                            onApply = { presetRole, ids ->
+                                role = presetRole
+                                selectedIds = ids
+                            }
+                        )
+                    }
+
+                    item {
                         SectionHeader(
                             title = "3. Indennità",
                             trailing = if (selectedIds.isEmpty()) "Nessuna" else "${selectedIds.size} selezionate"
@@ -1143,6 +1162,9 @@ private fun ShiftEditorScreen(
                         }
                     }
 
+                    coherenceWarnings.forEach { warning ->
+                        item { WarningPanel(warning) }
+                    }
                     relationWarnings.forEach { warning ->
                         item { WarningPanel(warning) }
                     }
@@ -1385,6 +1407,7 @@ private fun WarningPanel(text: String) {
 @Composable
 private fun SummaryScreen(repository: PortRepository) {
     val rows by repository.shiftRows.collectAsState(initial = emptyList())
+    val rules by repository.rules.collectAsState(initial = emptyList())
     var month by remember { mutableStateOf(YearMonth.now()) }
 
     val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
@@ -1458,6 +1481,9 @@ private fun SummaryScreen(repository: PortRepository) {
                 }
             }
         }
+
+        item { PayslipComparisonCard(month = month, rows = monthRows, rules = rules) }
+        item { MonthlyExportCard(month = month, rows = monthRows) }
 
         item { SectionHeader("Giornate del mese") }
         if (groupedDays.isEmpty()) {
@@ -1854,18 +1880,9 @@ private fun SettingsScreen(repository: PortRepository) {
             }
         }
 
-        item {
-            SettingsCard("Backup e dispositivi") {
-                Text(
-                    "Struttura predisposta per il futuro accesso Google, backup e autorizzazione dei dispositivi.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("Backup database") }
-                OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("Gestisci dispositivi") }
-            }
-        }
+        item { PresetSettingsCard() }
+        item { SpecialCalendarSettingsCard() }
+        item { BackupSettingsCard(repository) }
 
         savedMessage?.let { message ->
             item { InfoPanel(message) }
