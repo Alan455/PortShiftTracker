@@ -1,9 +1,10 @@
 name: Android CI + UI screenshot
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+  push:
+    paths:
+      - '.ci-trigger'
 
 permissions:
   contents: read
@@ -16,16 +17,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Recreate project from source archive
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/portshift"
-          cat ci/chunks/*.b64 > "$RUNNER_TEMP/PortShiftTracker_v0.7.b64"
-          base64 -d "$RUNNER_TEMP/PortShiftTracker_v0.7.b64" > "$RUNNER_TEMP/PortShiftTracker_v0.7.zip"
-          unzip -t "$RUNNER_TEMP/PortShiftTracker_v0.7.zip"
-          unzip -q "$RUNNER_TEMP/PortShiftTracker_v0.7.zip" -d "$RUNNER_TEMP/portshift"
-          echo "PROJECT_DIR=$RUNNER_TEMP/portshift/PortShiftTracker_v0.7" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -50,18 +41,16 @@ jobs:
           gradle-version: '9.6.0'
 
       - name: Unit tests
-        working-directory: ${{ env.PROJECT_DIR }}
         run: gradle --stacktrace testDebugUnitTest
 
       - name: Build debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
         run: gradle --stacktrace assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: PortShiftTracker-v0.7-debug-apk
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
       - name: Enable KVM for emulator
@@ -81,17 +70,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            mkdir -p "$PROJECT_DIR/screenshots"
-            adb install -r "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+            mkdir -p screenshots
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n it.alantamanti.portshifttracker/.MainActivity
             sleep 5
-            adb exec-out screencap -p > "$PROJECT_DIR/screenshots/home.png"
+            adb exec-out screencap -p > screenshots/home.png
             adb shell uiautomator dump /sdcard/window.xml || true
-            adb pull /sdcard/window.xml "$PROJECT_DIR/screenshots/window.xml" || true
+            adb pull /sdcard/window.xml screenshots/window.xml || true
 
       - name: Upload UI screenshots
         uses: actions/upload-artifact@v4
         with:
           name: PortShiftTracker-v0.7-ui-preview
-          path: ${{ env.PROJECT_DIR }}/screenshots
+          path: screenshots
           if-no-files-found: warn
