@@ -77,9 +77,10 @@ internal fun QuickShiftPanel(
     date: LocalDate,
     rules: List<AllowanceRuleEntity>,
     selectedKind: QuickShiftKind?,
+    overrideClass: PortDayClass? = null,
     onKindSelected: (QuickShiftKind) -> Unit
 ) {
-    val dayClass = portDayClass(date)
+    val dayClass = overrideClass ?: portDayClass(date)
     val dayLabel = date.format(quickDateFormatter).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ITALIAN) else it.toString() }
 
     Card(
@@ -96,6 +97,9 @@ internal fun QuickShiftPanel(
                 Column {
                     Text("Turno rapido", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(dayLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (overrideClass != null) {
+                        Text("Calendario speciale", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
                 Surface(shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                     Text(
@@ -115,6 +119,7 @@ internal fun QuickShiftPanel(
                         date = date,
                         rules = rules,
                         selected = selectedKind == kind,
+                        overrideClass = overrideClass,
                         modifier = Modifier.weight(1f),
                         onClick = { onKindSelected(kind) }
                     )
@@ -127,6 +132,7 @@ internal fun QuickShiftPanel(
                         date = date,
                         rules = rules,
                         selected = selectedKind == kind,
+                        overrideClass = overrideClass,
                         modifier = Modifier.weight(1f),
                         onClick = { onKindSelected(kind) }
                     )
@@ -135,7 +141,7 @@ internal fun QuickShiftPanel(
             }
 
             selectedKind?.let { kind ->
-                val resolution = resolveQuickShift(kind, date)
+                val resolution = resolveQuickShift(kind, date, overrideClass)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -166,10 +172,11 @@ private fun QuickShiftTile(
     date: LocalDate,
     rules: List<AllowanceRuleEntity>,
     selected: Boolean,
+    overrideClass: PortDayClass?,
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val resolution = resolveQuickShift(kind, date)
+    val resolution = resolveQuickShift(kind, date, overrideClass)
     val rule = rules.firstOrNull { it.code == resolution.ruleCode && it.enabled }
     val shape = RoundedCornerShape(14.dp)
 
