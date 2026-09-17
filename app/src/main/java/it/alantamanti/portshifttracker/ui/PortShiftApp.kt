@@ -1,5 +1,7 @@
 package it.alantamanti.portshifttracker.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -899,46 +902,117 @@ private fun ShiftEditorScreen(
                     }
 
                     item {
-                        EditorSectionCard(title = "2. Data, orario e mansione") {
-                            Text(
-                                "Formato data e ora: AAAA-MM-GG HH:MM",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = startText,
-                                onValueChange = { startText = it },
-                                label = { Text("Inizio") },
+                        val context = LocalContext.current
+                        val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
+                        val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
+
+                        EditorSectionCard(title = "2. Data e orario") {
+                            PickerField(
+                                label = "Data",
+                                value = italianTitle(currentStart.toLocalDate().format(shortDayFormatter)),
                                 modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                onClick = {
+                                    val duration = java.time.Duration.between(currentStart, currentEnd)
+                                        .takeIf { !it.isNegative && !it.isZero }
+                                        ?: java.time.Duration.ofHours(6)
+                                    DatePickerDialog(
+                                        context,
+                                        { _, year, month, day ->
+                                            val newStart = LocalDateTime.of(
+                                                LocalDate.of(year, month + 1, day),
+                                                currentStart.toLocalTime()
+                                            )
+                                            startText = newStart.format(editFormatter)
+                                            endText = newStart.plus(duration).format(editFormatter)
+                                        },
+                                        currentStart.year,
+                                        currentStart.monthValue - 1,
+                                        currentStart.dayOfMonth
+                                    ).show()
+                                }
                             )
+
                             Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = endText,
-                                onValueChange = { endText = it },
-                                label = { Text("Fine") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text("Durata rapida", style = MaterialTheme.typography.labelMedium)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PickerField(
+                                    label = "Ora inizio",
+                                    value = currentStart.format(timeFormatter),
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        val duration = java.time.Duration.between(currentStart, currentEnd)
+                                            .takeIf { !it.isNegative && !it.isZero }
+                                            ?: java.time.Duration.ofHours(6)
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                val newStart = LocalDateTime.of(
+                                                    currentStart.toLocalDate(),
+                                                    LocalTime.of(hour, minute)
+                                                )
+                                                startText = newStart.format(editFormatter)
+                                                endText = newStart.plus(duration).format(editFormatter)
+                                            },
+                                            currentStart.hour,
+                                            currentStart.minute,
+                                            true
+                                        ).show()
+                                    }
+                                )
+                                PickerField(
+                                    label = "Ora fine",
+                                    value = currentEnd.format(timeFormatter) + if (currentEnd.toLocalDate().isAfter(currentStart.toLocalDate())) " +1g" else "",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                var candidate = LocalDateTime.of(
+                                                    currentStart.toLocalDate(),
+                                                    LocalTime.of(hour, minute)
+                                                )
+                                                if (!candidate.isAfter(currentStart)) candidate = candidate.plusDays(1)
+                                                endText = candidate.format(editFormatter)
+                                            },
+                                            currentEnd.hour,
+                                            currentEnd.minute,
+                                            true
+                                        ).show()
+                                    }
+                                )
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Durata rapida", style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    java.time.Duration.between(currentStart, currentEnd)
+                                        .takeIf { !it.isNegative }
+                                        ?.let { d -> "${d.toHours()}h ${d.toMinutesPart()}m" }
+                                        ?: "—",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Spacer(Modifier.height(4.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf(4L, 6L, 8L).forEach { hours ->
                                     OutlinedButton(
-                                        onClick = {
-                                            runCatching { LocalDateTime.parse(startText, editFormatter) }
-                                                .getOrNull()
-                                                ?.let { endText = it.plusHours(hours).format(editFormatter) }
-                                        },
+                                        onClick = { endText = currentStart.plusHours(hours).format(editFormatter) },
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Text("+$hours h")
+                                        Text("$hours h")
                                     }
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+
+                    item {
+                        EditorSectionCard(title = "Mansione e note") {
                             OutlinedTextField(
                                 value = role,
                                 onValueChange = { role = it },
@@ -1051,6 +1125,42 @@ private fun ShiftEditorScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PickerField(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Surface(
+        modifier = modifier
+            .heightIn(min = 62.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            .clickable(onClick = onClick),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
