@@ -69,6 +69,25 @@ class PortRepository(
     suspend fun deleteShift(shift: ShiftEntity) = shiftDao.delete(shift)
     suspend fun saveRule(rule: AllowanceRuleEntity) = ruleDao.upsert(rule)
     suspend fun deleteRule(rule: AllowanceRuleEntity) = ruleDao.delete(rule)
+
+    suspend fun exportSnapshot(): DatabaseSnapshot = DatabaseSnapshot(
+        workers = workerDao.getAll(),
+        shifts = shiftDao.getAll(),
+        rules = ruleDao.getAll(),
+        selections = selectionDao.getAll()
+    )
+
+    suspend fun restoreSnapshot(snapshot: DatabaseSnapshot) = db.withTransaction {
+        selectionDao.deleteAll()
+        shiftDao.deleteAll()
+        ruleDao.deleteAll()
+        workerDao.deleteAll()
+
+        workerDao.insertAll(snapshot.workers)
+        ruleDao.insertAll(snapshot.rules)
+        shiftDao.insertAll(snapshot.shifts)
+        if (snapshot.selections.isNotEmpty()) selectionDao.insertAll(snapshot.selections)
+    }
 }
 
 data class ShiftWithPay(
