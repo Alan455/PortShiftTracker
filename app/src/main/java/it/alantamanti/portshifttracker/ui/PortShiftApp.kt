@@ -669,6 +669,8 @@ private fun ShiftEditorScreen(
     var performanceType by remember(initialShift?.id) { mutableStateOf(initialShift?.performanceType ?: PerformanceType.TURNO) }
     var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
+    var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
     val calculator = remember { AllowanceCalculator() }
 
     val manualRules = rules.filter {
@@ -730,19 +732,34 @@ private fun ShiftEditorScreen(
                             }
                         },
                         title = {
-                            Text(if (initialShift == null) "Nuova prestazione" else "Modifica prestazione")
+                            Column {
+                                Text(if (initialShift == null) "Nuova prestazione" else "Modifica prestazione")
+                                Text(
+                                    italianTitle(initialDate.format(shortDayFormatter)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.82f)
+                                )
+                            }
                         }
                     )
                 },
                 bottomBar = {
-                    Surface(color = Color.White, tonalElevation = 6.dp) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column {
-                                    Text("Totale prestazione", style = MaterialTheme.typography.labelMedium)
+                    Surface(color = Color.White, tonalElevation = 8.dp) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "${selectedIds.size} indennità selezionate",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     preview?.let {
                                         Text(
-                                            "Base ${money(it.basePayCents)} + indennità ${money(it.allowancesCents)}",
+                                            "Base ${money(it.basePayCents)}  •  Indennità ${money(it.allowancesCents)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -773,9 +790,10 @@ private fun ShiftEditorScreen(
                                         onSave(shift, selectedIds)
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp)
                             ) {
-                                Text(if (initialShift == null) "Salva prestazione" else "Salva modifiche")
+                                Text(if (initialShift == null) "Salva prestazione" else "Salva modifiche", fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -783,40 +801,115 @@ private fun ShiftEditorScreen(
             ) { padding ->
                 LazyColumn(
                     Modifier.padding(padding).fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        start = 16.dp,
+                        top = 12.dp,
+                        end = 16.dp,
+                        bottom = 132.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item {
-                        EditorSectionCard(title = "Tipo di prestazione") {
+                        EditorSectionCard(title = "1. Tipo di prestazione") {
                             Row(
-                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 PerformanceType.entries.forEach { type ->
-                                    FilterChip(
-                                        selected = performanceType == type,
-                                        onClick = {
-                                            performanceType = type
-                                            selectedIds = selectedIds.filterTo(mutableSetOf()) { id ->
-                                                rules.firstOrNull { it.id == id }
-                                                    ?.let { (it.performanceMask and type.maskBit) != 0 } == true
-                                            }
-                                        },
-                                        label = { Text(performanceLabel(type)) }
-                                    )
+                                    val selected = performanceType == type
+                                    val shape = RoundedCornerShape(14.dp)
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 74.dp)
+                                            .border(
+                                                width = if (selected) 2.dp else 1.dp,
+                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                                shape = shape
+                                            )
+                                            .clickable {
+                                                performanceType = type
+                                                selectedIds = selectedIds.filterTo(mutableSetOf()) { id ->
+                                                    rules.firstOrNull { it.id == id }
+                                                        ?.let { (it.performanceMask and type.maskBit) != 0 } == true
+                                                }
+                                            },
+                                        shape = shape,
+                                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Column(
+                                            Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Text(
+                                                when (type) {
+                                                    PerformanceType.TURNO -> "T"
+                                                    PerformanceType.DOPPIO -> "2×"
+                                                    PerformanceType.MEZZO_DOPPIO -> "½×"
+                                                },
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                performanceLabel(type),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(10.dp))
                             InfoPanel(performanceInfo(worker, performanceType))
                         }
                     }
 
+                    preview?.let { pay ->
+                        item {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("Totale provvisorio", style = MaterialTheme.typography.labelMedium)
+                                        Text(
+                                            "${selectedIds.size} indennità",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        money(pay.totalPayCents),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     item {
-                        EditorSectionCard(title = "Data, orario e mansione") {
+                        EditorSectionCard(title = "2. Data, orario e mansione") {
+                            Text(
+                                "Formato data e ora: AAAA-MM-GG HH:MM",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = startText,
                                 onValueChange = { startText = it },
-                                label = { Text("Inizio (yyyy-MM-dd HH:mm)") },
+                                label = { Text("Inizio") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true
                             )
@@ -824,10 +917,27 @@ private fun ShiftEditorScreen(
                             OutlinedTextField(
                                 value = endText,
                                 onValueChange = { endText = it },
-                                label = { Text("Fine (yyyy-MM-dd HH:mm)") },
+                                label = { Text("Fine") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true
                             )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Durata rapida", style = MaterialTheme.typography.labelMedium)
+                            Spacer(Modifier.height(4.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(4L, 6L, 8L).forEach { hours ->
+                                    OutlinedButton(
+                                        onClick = {
+                                            runCatching { LocalDateTime.parse(startText, editFormatter) }
+                                                .getOrNull()
+                                                ?.let { endText = it.plusHours(hours).format(editFormatter) }
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("+$hours h")
+                                    }
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = role,
@@ -836,15 +946,32 @@ private fun ShiftEditorScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true
                             )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = notes,
-                                onValueChange = { notes = it },
-                                label = { Text("Note") },
-                                modifier = Modifier.fillMaxWidth(),
-                                minLines = 2
-                            )
+                            Spacer(Modifier.height(4.dp))
+                            if (!showNotes) {
+                                TextButton(onClick = { showNotes = true }) { Text("＋ Aggiungi note") }
+                            } else {
+                                OutlinedTextField(
+                                    value = notes,
+                                    onValueChange = { notes = it },
+                                    label = { Text("Note") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 2
+                                )
+                                TextButton(
+                                    onClick = {
+                                        notes = ""
+                                        showNotes = false
+                                    }
+                                ) { Text("Rimuovi note") }
+                            }
                         }
+                    }
+
+                    item {
+                        SectionHeader(
+                            title = "3. Indennità",
+                            trailing = if (selectedIds.isEmpty()) "Nessuna" else "${selectedIds.size} selezionate"
+                        )
                     }
 
                     categoriesForPerformance(performanceType).forEach { category ->
@@ -866,7 +993,26 @@ private fun ShiftEditorScreen(
 
                     if (suggestedCompanions.isNotEmpty()) {
                         item {
-                            InfoPanel("Completamento possibile: ${suggestedCompanions.joinToString { it.name }}.")
+                            EditorSectionCard(title = "Suggerite dalla selezione") {
+                                Text(
+                                    "Puoi aggiungerle con un tocco.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    suggestedCompanions.take(6).forEach { rule ->
+                                        OutlinedButton(
+                                            onClick = { selectedIds = toggleRule(selectedIds, rule, manualRules, true) }
+                                        ) {
+                                            Text("＋ ${rule.name}")
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -878,20 +1024,31 @@ private fun ShiftEditorScreen(
                         item { WarningPanel(message) }
                     }
 
-                    preview?.let { pay ->
+                    if (preview != null) {
                         item {
-                            EditorSectionCard(title = "Anteprima calcolo") {
-                                BreakdownLine("Base", pay.basePayCents)
-                                pay.allowanceLines.forEach { line ->
-                                    BreakdownLine(line.name, line.amountCents)
-                                }
-                                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                                BreakdownLine("Totale", pay.totalPayCents, bold = true, primary = true)
+                            TextButton(
+                                onClick = { showBreakdown = !showBreakdown },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (showBreakdown) "Nascondi dettaglio calcolo" else "Vedi dettaglio calcolo")
                             }
                         }
                     }
 
-                    item { Spacer(Modifier.height(110.dp)) }
+                    if (showBreakdown) {
+                        preview?.let { pay ->
+                            item {
+                                EditorSectionCard(title = "Dettaglio calcolo") {
+                                    BreakdownLine("Base", pay.basePayCents)
+                                    pay.allowanceLines.forEach { line ->
+                                        BreakdownLine(line.name, line.amountCents)
+                                    }
+                                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                                    BreakdownLine("Totale", pay.totalPayCents, bold = true, primary = true)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -921,57 +1078,111 @@ private fun AllowanceCategoryCard(
     performanceType: PerformanceType,
     onToggle: (AllowanceRuleEntity, Boolean) -> Unit
 ) {
-    EditorSectionCard(title = categoryEditorTitle(category, performanceType)) {
-        when (category) {
-            AllowanceCategory.AREA -> {
+    val selectedCount = rules.count { it.id in selectedIds }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
+                    categoryEditorTitle(category, performanceType),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (selectedCount > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            "$selectedCount scelte",
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            when (category) {
+                AllowanceCategory.AREA -> Text(
                     "Se prevista, registra l'area insieme all'avviamento.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(6.dp))
-            }
-            AllowanceCategory.DOPPIO -> {
-                Text(
+                AllowanceCategory.DOPPIO -> Text(
                     if (performanceType == PerformanceType.MEZZO_DOPPIO)
-                        "Nel Mezzo Doppio questa indennità viene dimezzata; Area e Disagi restano interi."
+                        "Nel Mezzo Doppio si dimezza solo l'indennità di turno; Area e Disagi restano interi."
                     else
-                        "La base Doppio è separata: qui scegli la sua indennità di turno.",
+                        "La base Doppio è separata: qui scegli la relativa indennità di turno.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(6.dp))
+                else -> Unit
             }
-            else -> Unit
-        }
 
-        rules.forEachIndexed { index, rule ->
-            val checked = rule.id in selectedIds
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onToggle(rule, !checked) }
-                    .background(if (checked) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(checked = checked, onCheckedChange = { onToggle(rule, it) })
-                Column(Modifier.weight(1f)) {
-                    Text(rule.name, fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal)
-                    Text(
-                        ruleDescription(rule),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            rules.chunked(2).forEach { pair ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { rule ->
+                        val checked = rule.id in selectedIds
+                        val shape = RoundedCornerShape(14.dp)
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 76.dp)
+                                .border(
+                                    width = if (checked) 2.dp else 1.dp,
+                                    color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                    shape = shape
+                                )
+                                .clickable { onToggle(rule, !checked) },
+                            shape = shape,
+                            color = if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        ) {
+                            Column(
+                                Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        rule.name,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (checked) FontWeight.Bold else FontWeight.SemiBold
+                                    )
+                                    if (checked) {
+                                        Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Text(
+                                    ruleValueLabel(rule, performanceType),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (checked) {
+                                    Text(
+                                        ruleDescription(rule),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
-                Text(
-                    ruleValueLabel(rule, performanceType),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
-            if (index != rules.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
