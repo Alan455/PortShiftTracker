@@ -657,6 +657,7 @@ private fun ShiftEditorScreen(
     onDismiss: () -> Unit,
     onSave: (ShiftEntity, Set<Long>) -> Unit
 ) {
+    val context = LocalContext.current
     val initialZone = ZoneId.of(initialShift?.zoneId ?: "Europe/Rome")
     val initialStart = initialShift?.let {
         LocalDateTime.ofInstant(Instant.ofEpochMilli(it.startEpochMillis), initialZone)
@@ -674,6 +675,13 @@ private fun ShiftEditorScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
+    val uiPrefs = remember(context) { context.getSharedPreferences("portshift_ui", 0) }
+    var quickMode by remember(initialShift?.id) { mutableStateOf(uiPrefs.getBoolean("quick_shift_mode", true)) }
+    var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
+        mutableStateOf(inferQuickShiftKind(initialSelectedIds, rules))
+    }
+    val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
+    val effectiveQuickMode = quickMode && performanceType == PerformanceType.TURNO
     val calculator = remember { AllowanceCalculator() }
 
     val manualRules = rules.filter {
@@ -738,7 +746,7 @@ private fun ShiftEditorScreen(
                             Column {
                                 Text(if (initialShift == null) "Nuova prestazione" else "Modifica prestazione")
                                 Text(
-                                    italianTitle(initialDate.format(shortDayFormatter)),
+                                    italianTitle(editorDate.format(shortDayFormatter)),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.82f)
                                 )
@@ -870,6 +878,40 @@ private fun ShiftEditorScreen(
                         }
                     }
 
+                    item {
+                        EntryModeSelector(
+                            quickMode = effectiveQuickMode,
+                            quickEnabled = performanceType == PerformanceType.TURNO,
+                            onQuick = {
+                                quickMode = true
+                                uiPrefs.edit().putBoolean("quick_shift_mode", true).apply()
+                                val inferred = inferQuickShiftKind(selectedIds, rules)
+                                if (inferred != null) quickKind = inferred
+                                quickKind?.let { kind ->
+                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate)
+                                }
+                            },
+                            onDetailed = {
+                                quickMode = false
+                                uiPrefs.edit().putBoolean("quick_shift_mode", false).apply()
+                            }
+                        )
+                    }
+
+                    if (effectiveQuickMode) {
+                        item {
+                            QuickShiftPanel(
+                                date = editorDate,
+                                rules = rules,
+                                selectedKind = quickKind,
+                                onKindSelected = { kind ->
+                                    quickKind = kind
+                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate)
+                                }
+                            )
+                        }
+                    }
+
                     preview?.let { pay ->
                         item {
                             Surface(
@@ -902,7 +944,6 @@ private fun ShiftEditorScreen(
                     }
 
                     item {
-                        val context = LocalContext.current
                         val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
                         val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
 
@@ -924,6 +965,16 @@ private fun ShiftEditorScreen(
                                             )
                                             startText = newStart.format(editFormatter)
                                             endText = newStart.plus(duration).format(editFormatter)
+                                            if (quickMode && performanceType == PerformanceType.TURNO) {
+                                                quickKind?.let { kind ->
+                                                    selectedIds = applyQuickTurnSelection(
+                                                        selectedIds,
+                                                        rules,
+                                                        kind,
+                                                        newStart.toLocalDate()
+                                                    )
+                                                }
+                                            }
                                         },
                                         currentStart.year,
                                         currentStart.monthValue - 1,
@@ -1048,7 +1099,9 @@ private fun ShiftEditorScreen(
                         )
                     }
 
-                    categoriesForPerformance(performanceType).forEach { category ->
+                    categoriesForPerformance(performanceType)
+                        .filterNot { effectiveQuickMode && it == AllowanceCategory.TURNO }
+                        .forEach { category ->
                         val categoryRules = manualRules.filter { it.category == category }
                         if (categoryRules.isNotEmpty()) {
                             item {
