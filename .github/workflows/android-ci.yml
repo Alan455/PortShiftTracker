@@ -1,6 +1,8 @@
 name: Android CI + UI screenshot
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
