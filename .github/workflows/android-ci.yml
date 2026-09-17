@@ -2,9 +2,6 @@ name: Android CI + UI screenshot
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.ci-trigger'
 
 permissions:
   contents: read
