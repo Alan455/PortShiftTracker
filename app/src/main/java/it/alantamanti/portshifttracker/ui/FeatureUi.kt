@@ -343,7 +343,8 @@ internal fun PayslipComparisonCard(
                             disagioCents = parseEuro(disagioText),
                             areaCents = parseEuro(areaText),
                             doppioCents = parseEuro(doppioText),
-                            altreCents = parseEuro(altreText)
+                            altreCents = parseEuro(altreText),
+                            locked = existing?.locked ?: false
                         )
                     )
                     saved = true
@@ -351,6 +352,25 @@ internal fun PayslipComparisonCard(
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Salva confronto") }
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    val current = existing ?: PayslipComparison(month = month.toString())
+                    store.savePayslip(current.copy(locked = !current.locked))
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (existing?.locked == true) "Riapri mese" else "Chiudi mese")
+        }
+        Text(
+            if (existing?.locked == true)
+                "Mese chiuso: modifiche e cancellazioni richiedono conferma."
+            else
+                "Chiudi il mese dopo averlo confrontato con la busta paga.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (saved) Text("Confronto salvato.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
     }
 }
