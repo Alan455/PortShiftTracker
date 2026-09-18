@@ -108,7 +108,7 @@ internal val PortGreen = Color(0xFF159A80)
 
 // Voci ritirate: restano nel DB per non alterare eventuali storico/backup,
 // ma non sono più selezionabili né mostrate nell'editor delle indennità.
-internal val retiredRuleCodes = setOf("ALT_BUON_PASTO", "ALT_CRAL", "ALT_MOD_DOPPIO")
+internal val retiredRuleCodes = setOf("ALT_BUON_PASTO", "ALT_CRAL", "ALT_MOD_DOPPIO", "ALT_GIORNALIERO_87")
 
 internal val portColorScheme = lightColorScheme(
     primary = PortBlue,
