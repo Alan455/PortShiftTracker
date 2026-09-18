@@ -408,8 +408,6 @@ private fun SummaryBreakdownCard(
                 .thenBy { it.label }
         )
 
-    val denominator = totals.total.coerceAtLeast(1L)
-
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(18.dp)
