@@ -47,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -67,8 +68,12 @@ import androidx.compose.ui.window.DialogProperties
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.data.local.AppFeatureStore
 import it.alantamanti.portshifttracker.data.local.ShiftEntity
+import it.alantamanti.portshifttracker.data.local.SpecialDayOverride
 import it.alantamanti.portshifttracker.data.local.WorkerEntity
+import it.alantamanti.portshifttracker.data.repository.DuplicatePerformanceException
 import it.alantamanti.portshifttracker.data.repository.PortRepository
+import it.alantamanti.portshifttracker.data.repository.normalizeSelectedRuleIds
+import it.alantamanti.portshifttracker.data.repository.selectionValidationMessage
 import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
 import it.alantamanti.portshifttracker.data.repository.toDomain
 import it.alantamanti.portshifttracker.domain.AllowanceApplicationMode
@@ -213,6 +218,9 @@ private fun HomeScreen(repository: PortRepository) {
     val workers by repository.workers.collectAsState(initial = emptyList())
     val rules by repository.rules.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val featureStore = remember(context) { AppFeatureStore(context) }
+    val specialDays by featureStore.specialDaysFlow.collectAsState(initial = emptyList())
 
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
@@ -224,9 +232,6 @@ private fun HomeScreen(repository: PortRepository) {
     val dayRows = rowsByDate[selectedDate].orEmpty().sortedBy { it.shift.startEpochMillis }
     val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
     val monthTotal = monthRows.sumOf { it.pay.totalPayCents }
-    val ruleUsageCounts = remember(rows) {
-        rows.flatMap { it.selectedRules }.groupingBy { it.id }.eachCount()
-    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -340,13 +345,14 @@ private fun HomeScreen(repository: PortRepository) {
             initialDate = editorDate!!,
             initialShift = null,
             initialSelectedIds = emptySet(),
-            ruleUsageCounts = ruleUsageCounts,
+            historyRows = rows,
+            specialDays = specialDays,
             onDismiss = { editorDate = null },
             onSave = { shifts, selectedIds ->
-                scope.launch {
-                    shifts.forEach { shift -> repository.addShiftWithSelections(shift, selectedIds) }
+                runCatching {
+                    repository.addShiftsWithSelections(shifts, selectedIds)
+                    Unit
                 }
-                editorDate = null
             }
         )
     }
@@ -358,13 +364,16 @@ private fun HomeScreen(repository: PortRepository) {
             initialDate = rowDate(row),
             initialShift = row.shift,
             initialSelectedIds = row.selectedRules.map { it.id }.toSet(),
-            ruleUsageCounts = ruleUsageCounts,
+            historyRows = rows,
+            specialDays = specialDays,
             onDismiss = { editingRow = null },
             onSave = { shifts, selectedIds ->
-                shifts.firstOrNull()?.let { shift ->
-                    scope.launch { repository.updateShiftWithSelections(shift, selectedIds) }
+                runCatching {
+                    shifts.firstOrNull()?.let { shift ->
+                        repository.updateShiftWithSelections(shift, selectedIds)
+                    }
+                    Unit
                 }
-                editingRow = null
             }
         )
     }
@@ -666,9 +675,10 @@ private fun ShiftEditorScreen(
     initialDate: LocalDate,
     initialShift: ShiftEntity?,
     initialSelectedIds: Set<Long>,
-    ruleUsageCounts: Map<Long, Int>,
+    historyRows: List<ShiftWithPay>,
+    specialDays: List<SpecialDayOverride>,
     onDismiss: () -> Unit,
-    onSave: (List<ShiftEntity>, Set<Long>) -> Unit
+    onSave: suspend (List<ShiftEntity>, Set<Long>) -> Result<Unit>
 ) {
     val context = LocalContext.current
     val initialZone = ZoneId.of(initialShift?.zoneId ?: "Europe/Rome")
@@ -687,9 +697,10 @@ private fun ShiftEditorScreen(
     var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
     var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
     var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
-    val featureStore = remember(context) { AppFeatureStore(context) }
+    val scope = rememberCoroutineScope()
     var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
         mutableStateOf(
             inferQuickShiftKind(
@@ -700,7 +711,8 @@ private fun ShiftEditorScreen(
         )
     }
     val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
-    val specialOverrideClass = featureStore.specialDay(editorDate)?.dayClass?.toPortDayClass()
+    val specialOverrideClass = specialDays.firstOrNull { it.epochDay == editorDate.toEpochDay() }
+        ?.dayClass?.toPortDayClass()
     // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
     // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
     val effectiveQuickMode =
@@ -713,7 +725,16 @@ private fun ShiftEditorScreen(
             it.applicationMode == AllowanceApplicationMode.MANUAL &&
             (it.performanceMask and performanceType.maskBit) != 0
     }
-    val selectedRules = manualRules.filter { it.id in selectedIds }
+    val normalizedSelectedIds = normalizeSelectedRuleIds(performanceType, selectedIds, rules)
+    LaunchedEffect(normalizedSelectedIds) {
+        if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
+    }
+    val selectedRules = manualRules.filter { it.id in normalizedSelectedIds }
+    val saveValidationMessage = selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
+    val usageScores = remember(historyRows, role, performanceType, editorDate) {
+        ruleUsageScores(historyRows, editorDate, performanceType, role)
+    }
+    val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
     val absenceRule = selectedRules.firstOrNull { it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" }
     val rangeEnabled = initialShift == null && absenceRule != null
     val effectiveRangeEnd = if (rangeEndDate.isBefore(editorDate)) editorDate else rangeEndDate
@@ -728,9 +749,9 @@ private fun ShiftEditorScreen(
         } else null
     }
     val suggestedCompanions = manualRules.filter { rule ->
-        rule.id !in selectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
+        rule.id !in normalizedSelectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
-    val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in selectedIds })
+    val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in normalizedSelectedIds })
 
     val draftShift = remember(startText, endText, role, notes, performanceType, initialShift?.id) {
         parseShiftOrNull(
@@ -745,7 +766,7 @@ private fun ShiftEditorScreen(
     }
     val preview = runCatching {
         draftShift?.let {
-            calculator.calculate(worker.toDomain(), it.toDomain(), rules.map { rule -> rule.toDomain() }, selectedIds)
+            calculator.calculate(worker.toDomain(), it.toDomain(), rules.map { rule -> rule.toDomain() }, normalizedSelectedIds)
         }
     }.getOrNull()
 
@@ -792,7 +813,7 @@ private fun ShiftEditorScreen(
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        "${selectedIds.size} indennità selezionate",
+                                        selectedSummary,
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -800,6 +821,11 @@ private fun ShiftEditorScreen(
                                         Text(
                                             "Base ${money(it.basePayCents)}  •  Indennità ${money(it.allowancesCents)}",
                                             style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            payFormula(it),
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -822,23 +848,43 @@ private fun ShiftEditorScreen(
                                         notes = notes,
                                         performanceType = performanceType
                                     )
-                                    if (shift == null) {
-                                        error = "Controlla data e orari: la fine deve essere successiva all'inizio."
-                                    } else {
-                                        error = null
-                                        val shiftsToSave = if (rangeEnabled) {
-                                            expandShiftRange(shift, effectiveRangeEnd)
-                                        } else {
-                                            listOf(shift)
+                                    when {
+                                        shift == null -> {
+                                            error = "Controlla data e orari: la fine deve essere successiva all'inizio."
                                         }
-                                        onSave(shiftsToSave, selectedIds)
+                                        saveValidationMessage != null -> {
+                                            error = saveValidationMessage
+                                        }
+                                        else -> {
+                                            error = null
+                                            val shiftsToSave = if (rangeEnabled) {
+                                                expandShiftRange(shift, effectiveRangeEnd)
+                                            } else {
+                                                listOf(shift)
+                                            }
+                                            saving = true
+                                            scope.launch {
+                                                val result = onSave(shiftsToSave, normalizedSelectedIds)
+                                                saving = false
+                                                result.onSuccess { onDismiss() }
+                                                    .onFailure { failure ->
+                                                        error = when (failure) {
+                                                            is DuplicatePerformanceException ->
+                                                                "Esiste già una ${performanceLabel(failure.performanceType)} in questa giornata."
+                                                            else -> failure.message ?: "Errore durante il salvataggio."
+                                                        }
+                                                    }
+                                            }
+                                        }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
+                                enabled = !saving && saveValidationMessage == null,
                                 shape = RoundedCornerShape(14.dp)
                             ) {
                                 Text(
                                     when {
+                                        saving -> "Salvataggio…"
                                         initialShift != null -> "Salva modifiche"
                                         rangeEnabled -> "Salva periodo ${absenceRule?.name.orEmpty()}"
                                         else -> "Salva prestazione"
@@ -884,8 +930,8 @@ private fun ShiftEditorScreen(
                                                     rules.firstOrNull { it.id == id }
                                                         ?.let { (it.performanceMask and type.maskBit) != 0 } == true
                                                 }
-                                                selectedIds = compatibleIds
-                                                quickKind = inferQuickShiftKind(compatibleIds, rules, type)
+                                                selectedIds = normalizeSelectedRuleIds(type, compatibleIds, rules)
+                                                quickKind = inferQuickShiftKind(selectedIds, rules, type)
                                             },
                                         shape = shape,
                                         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -931,13 +977,17 @@ private fun ShiftEditorScreen(
                                 overrideClass = specialOverrideClass,
                                 onKindSelected = { kind ->
                                     quickKind = kind
-                                    selectedIds = applyQuickTurnSelection(
-                                        currentIds = selectedIds,
-                                        rules = rules,
-                                        kind = kind,
-                                        date = editorDate,
-                                        overrideClass = specialOverrideClass,
-                                        performanceType = performanceType
+                                    selectedIds = normalizeSelectedRuleIds(
+                                        performanceType,
+                                        applyQuickTurnSelection(
+                                            currentIds = selectedIds,
+                                            rules = rules,
+                                            kind = kind,
+                                            date = editorDate,
+                                            overrideClass = specialOverrideClass,
+                                            performanceType = performanceType
+                                        ),
+                                        rules
                                     )
                                 }
                             )
@@ -959,8 +1009,13 @@ private fun ShiftEditorScreen(
                                     Column {
                                         Text("Totale provvisorio", style = MaterialTheme.typography.labelMedium)
                                         Text(
-                                            "${selectedIds.size} indennità",
+                                            selectedSummary,
                                             style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            payFormula(pay),
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -1001,7 +1056,8 @@ private fun ShiftEditorScreen(
                                             if (performanceType == PerformanceType.TURNO) {
                                                 quickKind?.let { kind ->
                                                     val newDate = newStart.toLocalDate()
-                                                    val override = featureStore.specialDay(newDate)?.dayClass?.toPortDayClass()
+                                                    val override = specialDays.firstOrNull { it.epochDay == newDate.toEpochDay() }
+                                                        ?.dayClass?.toPortDayClass()
                                                     selectedIds = applyQuickTurnSelection(
                                                         selectedIds,
                                                         rules,
@@ -1137,7 +1193,7 @@ private fun ShiftEditorScreen(
                             performanceType = performanceType,
                             onApply = { presetRole, ids ->
                                 role = presetRole
-                                selectedIds = ids
+                                selectedIds = normalizeSelectedRuleIds(performanceType, ids, rules)
                             }
                         )
                     }
@@ -1145,7 +1201,7 @@ private fun ShiftEditorScreen(
                     item {
                         SectionHeader(
                             title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
-                            trailing = if (selectedIds.isEmpty()) "Nessuna" else "${selectedIds.size} selezionate"
+                            trailing = selectedSummary
                         )
                     }
 
@@ -1165,9 +1221,13 @@ private fun ShiftEditorScreen(
                                     rules = categoryRules,
                                     selectedIds = selectedIds,
                                     performanceType = performanceType,
-                                    usageCounts = ruleUsageCounts,
+                                    usageCounts = usageScores,
                                     onToggle = { rule, checked ->
-                                        selectedIds = toggleRule(selectedIds, rule, manualRules, checked)
+                                        selectedIds = normalizeSelectedRuleIds(
+                                            performanceType,
+                                            toggleRule(selectedIds, rule, manualRules, checked),
+                                            rules
+                                        )
                                     }
                                 )
                             }
@@ -1222,7 +1282,11 @@ private fun ShiftEditorScreen(
                                 ) {
                                     suggestedCompanions.take(6).forEach { rule ->
                                         OutlinedButton(
-                                            onClick = { selectedIds = toggleRule(selectedIds, rule, manualRules, true) }
+                                            onClick = { selectedIds = normalizeSelectedRuleIds(
+                                                performanceType,
+                                                toggleRule(selectedIds, rule, manualRules, true),
+                                                rules
+                                            ) }
                                         ) {
                                             Text("＋ ${rule.name}")
                                         }
@@ -1239,6 +1303,9 @@ private fun ShiftEditorScreen(
                         item { WarningPanel(warning) }
                     }
 
+                    saveValidationMessage?.let { message ->
+                        item { WarningPanel(message) }
+                    }
                     error?.let { message ->
                         item { WarningPanel(message) }
                     }
