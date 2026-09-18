@@ -1,5 +1,6 @@
 package it.alantamanti.portshifttracker.ui
 
+import it.alantamanti.portshifttracker.domain.PerformanceType
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
@@ -26,6 +27,54 @@ class QuickShiftModeTest {
     fun giornaliero_is_available_with_the_other_quick_shifts() {
         assertEquals("G", resolveQuickShift(QuickShiftKind.GIORNALIERO, LocalDate.of(2026, 9, 18)).ruleCode)
         assertEquals("G", resolveQuickShift(QuickShiftKind.GIORNALIERO, LocalDate.of(2026, 9, 20)).ruleCode)
+    }
+
+    @Test
+    fun doppio_shows_only_pom_sera_and_sera2() {
+        assertEquals(
+            listOf(QuickShiftKind.POMERIGGIO, QuickShiftKind.SERA, QuickShiftKind.SERA2),
+            quickShiftKindsFor(PerformanceType.DOPPIO)
+        )
+    }
+
+    @Test
+    fun doppio_pomeriggio_chooses_modifier_from_date() {
+        val weekday = resolveQuickShift(
+            QuickShiftKind.POMERIGGIO,
+            LocalDate.of(2026, 9, 18),
+            performanceType = PerformanceType.DOPPIO
+        )
+        val saturday = resolveQuickShift(
+            QuickShiftKind.POMERIGGIO,
+            LocalDate.of(2026, 9, 19),
+            performanceType = PerformanceType.DOPPIO
+        )
+        val holiday = resolveQuickShift(
+            QuickShiftKind.POMERIGGIO,
+            LocalDate.of(2026, 9, 20),
+            performanceType = PerformanceType.DOPPIO
+        )
+
+        assertEquals("DOP_POM", weekday.ruleCode)
+        assertEquals("DOP_POMS", saturday.ruleCode)
+        assertEquals("DOP_POMF", holiday.ruleCode)
+    }
+
+    @Test
+    fun doppio_sera2_chooses_saturday_and_holiday_variants() {
+        val saturday = resolveQuickShift(
+            QuickShiftKind.SERA2,
+            LocalDate.of(2026, 9, 19),
+            performanceType = PerformanceType.DOPPIO
+        )
+        val holiday = resolveQuickShift(
+            QuickShiftKind.SERA2,
+            LocalDate.of(2026, 9, 20),
+            performanceType = PerformanceType.DOPPIO
+        )
+
+        assertEquals("DOP_SERAS2", saturday.ruleCode)
+        assertEquals("DOP_SERAF2", holiday.ruleCode)
     }
 
     @Test
