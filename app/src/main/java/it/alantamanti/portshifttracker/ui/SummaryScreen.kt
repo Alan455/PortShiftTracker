@@ -204,8 +204,7 @@ internal fun SummaryScreen(repository: PortRepository) {
                         dayRows.forEach { row ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(
-                                    performanceLabel(row.shift.performanceType) +
-                                        mainAllowanceName(row)?.let { " • $it" }.orEmpty(),
+                                    displayShiftLabel(row),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(money(row.pay.totalPayCents), style = MaterialTheme.typography.bodySmall)
