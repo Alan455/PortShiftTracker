@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -387,7 +388,8 @@ internal fun HomeScreen(repository: PortRepository) {
                         val result = snackbarHostState.showSnackbar(
                             message = "Prestazione eliminata",
                             actionLabel = "Annulla",
-                            withDismissAction = true
+                            withDismissAction = true,
+                            duration = SnackbarDuration.Long
                         )
                         if (result == SnackbarResult.ActionPerformed) {
                             runCatching {
