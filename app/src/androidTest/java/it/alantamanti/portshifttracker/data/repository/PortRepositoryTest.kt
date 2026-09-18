@@ -11,6 +11,7 @@ import it.alantamanti.portshifttracker.domain.AllowanceApplicationMode
 import it.alantamanti.portshifttracker.domain.AllowanceCalculationType
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.PerformanceType
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -112,6 +113,23 @@ class PortRepositoryTest {
 
         // Rimane soltanto il record preesistente: il primo giorno del range è rollbackato.
         assertEquals(1, runBlocking { db.shiftDao().getAll().size })
+    }
+
+
+    @Test
+    fun range_query_returns_only_requested_period() = runBlocking {
+        val first = LocalDate.of(2026, 1, 10)
+        val second = LocalDate.of(2026, 9, 10)
+        repository.addShiftWithSelections(shift(first, PerformanceType.TURNO), setOf(1))
+        repository.addShiftWithSelections(shift(second, PerformanceType.TURNO), setOf(1))
+
+        val zone = ZoneId.of("Europe/Rome")
+        val start = LocalDate.of(2026, 9, 1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = LocalDate.of(2026, 10, 1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val rows = repository.shiftRowsBetween(start, end).first()
+
+        assertEquals(1, rows.size)
+        assertEquals(second.toEpochDay(), rows.single().shift.serviceEpochDay)
     }
 
     private fun shift(date: LocalDate, type: PerformanceType): ShiftEntity {
