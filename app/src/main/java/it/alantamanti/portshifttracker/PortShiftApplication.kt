@@ -49,6 +49,47 @@ class PortShiftApplication : Application() {
         // Aggiunge soltanto le voci mancanti. Le modifiche dell'utente restano intatte.
         DefaultCatalog.rules().forEach { db.allowanceRuleDao().insertIfMissing(it) }
 
+        // Riallinea il catalogo voci sui database già esistenti.
+        // Donazione sangue, Inail e Congedo non sono Avviamenti.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET category = 'ALTRE_VOCI', priority = 512, " +
+                "performanceMask = 1, name = 'Donazione sangue' WHERE code = 'AVV_DS'"
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET category = 'ALTRE_VOCI', priority = 513, " +
+                "performanceMask = 1 WHERE code = 'AVV_INAIL'"
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET category = 'ALTRE_VOCI', priority = 514, " +
+                "performanceMask = 1 WHERE code = 'AVV_CONGEDO'"
+        )
+
+        // FT/MM/IMA/Fisios erano duplicati legacy delle corrispondenti voci in
+        // "Altre voci". Prima di eliminarli migriamo eventuali selezioni storiche.
+        db.openHelper.writableDatabase.execSQL(
+            """
+            INSERT OR IGNORE INTO shift_allowance_selections (shiftId, ruleId)
+            SELECT sas.shiftId, target.id
+            FROM shift_allowance_selections sas
+            JOIN allowance_rules legacy ON legacy.id = sas.ruleId
+            JOIN allowance_rules target ON target.code = CASE legacy.code
+                WHEN 'AVV_FT' THEN 'ALT_FERIE'
+                WHEN 'AVV_MM' THEN 'ALT_MALATTIA'
+                WHEN 'AVV_IMA' THEN 'ALT_IMA'
+                WHEN 'AVV_FISIOS' THEN 'ALT_FISIOS'
+            END
+            WHERE legacy.code IN ('AVV_FT','AVV_MM','AVV_IMA','AVV_FISIOS')
+            """.trimIndent()
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "DELETE FROM shift_allowance_selections WHERE ruleId IN (" +
+                "SELECT id FROM allowance_rules WHERE code IN " +
+                "('AVV_FT','AVV_MM','AVV_IMA','AVV_FISIOS'))"
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "DELETE FROM allowance_rules WHERE code IN ('AVV_FT','AVV_MM','AVV_IMA','AVV_FISIOS')"
+        )
+
         // TUMezzo/ONmezzo sostituiscono il turno intero: manteniamo l'importo
         // eventualmente personalizzato, ma correggiamo il comportamento anche sui DB esistenti.
         db.openHelper.writableDatabase.execSQL(
