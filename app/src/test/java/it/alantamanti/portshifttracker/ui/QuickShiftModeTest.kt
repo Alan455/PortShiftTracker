@@ -24,17 +24,38 @@ class QuickShiftModeTest {
     }
 
     @Test
-    fun giornaliero_is_available_with_the_other_quick_shifts() {
+    fun giornaliero_is_resolved_but_removed_from_turn_quick_shift_row() {
         assertEquals("G", resolveQuickShift(QuickShiftKind.GIORNALIERO, LocalDate.of(2026, 9, 18)).ruleCode)
-        assertEquals("G", resolveQuickShift(QuickShiftKind.GIORNALIERO, LocalDate.of(2026, 9, 20)).ruleCode)
+        assertEquals(
+            listOf(
+                QuickShiftKind.MATTINA,
+                QuickShiftKind.POMERIGGIO,
+                QuickShiftKind.SERA,
+                QuickShiftKind.SERA2,
+                QuickShiftKind.NOTTE
+            ),
+            quickShiftKindsFor(PerformanceType.TURNO)
+        )
     }
 
     @Test
-    fun doppio_shows_only_pom_sera_and_sera2() {
+    fun doppio_shows_pom_sera_sera2_and_half_giornaliero() {
         assertEquals(
-            listOf(QuickShiftKind.POMERIGGIO, QuickShiftKind.SERA, QuickShiftKind.SERA2),
+            listOf(
+                QuickShiftKind.POMERIGGIO,
+                QuickShiftKind.SERA,
+                QuickShiftKind.SERA2,
+                QuickShiftKind.GIORNALIERO
+            ),
             quickShiftKindsFor(PerformanceType.DOPPIO)
         )
+        val giornaliero = resolveQuickShift(
+            QuickShiftKind.GIORNALIERO,
+            LocalDate.of(2026, 9, 18),
+            performanceType = PerformanceType.DOPPIO
+        )
+        assertEquals("DOP_G", giornaliero.ruleCode)
+        assertEquals("½G", giornaliero.compactCode)
     }
 
     @Test
