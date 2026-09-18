@@ -6,7 +6,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.MonthDay
 
-/** Five common port shifts used by the quick-entry UI. */
+/** Turni usati dall'inserimento rapido. */
 internal enum class QuickShiftKind(val label: String) {
     MATTINA("Mattina"),
     POMERIGGIO("Pomeriggio"),
@@ -31,14 +31,26 @@ internal data class QuickShiftResolution(
     val explanation: String
 )
 
+internal fun quickShiftKindsFor(performanceType: PerformanceType): List<QuickShiftKind> = when (performanceType) {
+    PerformanceType.TURNO -> QuickShiftKind.entries
+    PerformanceType.DOPPIO -> listOf(
+        QuickShiftKind.POMERIGGIO,
+        QuickShiftKind.SERA,
+        QuickShiftKind.SERA2,
+        QuickShiftKind.GIORNALIERO
+    )
+    PerformanceType.MEZZO_DOPPIO -> emptyList()
+}
+
 /**
- * Calendar used by the quick-entry mode for Ravenna port work.
- * An optional override comes from the editable "Calendario speciale" and always wins.
+ * Risolve automaticamente la variante feriale/sabato/festiva in base alla data.
+ * L'override del "Calendario speciale" ha sempre la precedenza.
  */
 internal fun resolveQuickShift(
     kind: QuickShiftKind,
     date: LocalDate,
-    overrideClass: PortDayClass? = null
+    overrideClass: PortDayClass? = null,
+    performanceType: PerformanceType = PerformanceType.TURNO
 ): QuickShiftResolution {
     val baseClass = overrideClass ?: portDayClass(date)
     val semiFestiveAfternoon = overrideClass == null && isPortSemiFestive(date) && kind in setOf(
@@ -51,35 +63,73 @@ internal fun resolveQuickShift(
     } else {
         baseClass
     }
-    val festiveForAllowance = effectiveClass == PortDayClass.FESTIVO || effectiveClass == PortDayClass.SEMIFESTIVO
+    val festiveForAllowance =
+        effectiveClass == PortDayClass.FESTIVO || effectiveClass == PortDayClass.SEMIFESTIVO
 
-    val (ruleCode, compactCode) = when (kind) {
-        QuickShiftKind.MATTINA -> if (festiveForAllowance) "MATF" to "MatF" else "MAT" to "Mat"
-        QuickShiftKind.POMERIGGIO -> when {
-            festiveForAllowance -> "POMF" to "PomF"
-            effectiveClass == PortDayClass.SABATO -> "POMS" to "PomS"
-            else -> "POM" to "Pom"
+    val (ruleCode, compactCode) = when (performanceType) {
+        PerformanceType.TURNO -> when (kind) {
+            QuickShiftKind.MATTINA ->
+                if (festiveForAllowance) "MATF" to "MatF" else "MAT" to "Mat"
+
+            QuickShiftKind.POMERIGGIO -> when {
+                festiveForAllowance -> "POMF" to "PomF"
+                effectiveClass == PortDayClass.SABATO -> "POMS" to "PomS"
+                else -> "POM" to "Pom"
+            }
+
+            QuickShiftKind.SERA -> when {
+                festiveForAllowance -> "SERAF" to "SeraF"
+                effectiveClass == PortDayClass.SABATO -> "SERAS" to "SeraS"
+                else -> "SERA" to "Sera"
+            }
+
+            QuickShiftKind.SERA2 -> when {
+                festiveForAllowance -> "SERAF2" to "Sera2F"
+                effectiveClass == PortDayClass.SABATO -> "SERAS2" to "SeraS2"
+                else -> "SERA2" to "Sera2"
+            }
+
+            QuickShiftKind.NOTTE ->
+                if (festiveForAllowance) "NOTTEF" to "NotteF" else "NOTTE" to "Notte"
+
+            QuickShiftKind.GIORNALIERO -> "G" to "G"
         }
-        QuickShiftKind.SERA -> when {
-            festiveForAllowance -> "SERAF" to "SeraF"
-            effectiveClass == PortDayClass.SABATO -> "SERAS" to "SeraS"
-            else -> "SERA" to "Sera"
+
+        PerformanceType.DOPPIO -> when (kind) {
+            QuickShiftKind.POMERIGGIO -> when {
+                festiveForAllowance -> "DOP_POMF" to "PomF"
+                effectiveClass == PortDayClass.SABATO -> "DOP_POMS" to "PomS"
+                else -> "DOP_POM" to "Pom"
+            }
+
+            QuickShiftKind.SERA -> when {
+                festiveForAllowance -> "DOP_SERAF" to "SeraF"
+                effectiveClass == PortDayClass.SABATO -> "DOP_SERAS" to "SeraS"
+                else -> "DOP_SERA" to "Sera"
+            }
+
+            QuickShiftKind.SERA2 -> when {
+                festiveForAllowance -> "DOP_SERAF2" to "Sera2F"
+                effectiveClass == PortDayClass.SABATO -> "DOP_SERAS2" to "SeraS2"
+                else -> "DOP_SERA2" to "Sera2"
+            }
+
+            QuickShiftKind.GIORNALIERO -> "DOP_G" to "G"
+
+            QuickShiftKind.MATTINA, QuickShiftKind.NOTTE ->
+                error("${kind.label} non è previsto nell'inserimento rapido del Doppio")
         }
-        QuickShiftKind.SERA2 -> when {
-            festiveForAllowance -> "SERAF2" to "Sera2F"
-            effectiveClass == PortDayClass.SABATO -> "SERAS2" to "SeraS2"
-            else -> "SERA2" to "Sera2"
-        }
-        QuickShiftKind.NOTTE -> if (festiveForAllowance) "NOTTEF" to "NotteF" else "NOTTE" to "Notte"
-        QuickShiftKind.GIORNALIERO -> "G" to "G"
+
+        PerformanceType.MEZZO_DOPPIO ->
+            error("Il Mezzo Doppio non usa l'inserimento rapido")
     }
 
     val prefix = if (overrideClass != null) "Calendario speciale: " else ""
     val explanation = prefix + when (effectiveClass) {
-        PortDayClass.FERIALE -> "giorno feriale, viene selezionata automaticamente $compactCode."
-        PortDayClass.SABATO -> "sabato, viene selezionata automaticamente $compactCode."
-        PortDayClass.FESTIVO -> "giorno festivo, viene selezionata automaticamente $compactCode."
-        PortDayClass.SEMIFESTIVO -> "semifestivo, viene applicata la variante festiva $compactCode."
+        PortDayClass.FERIALE -> "giorno feriale, viene selezionato automaticamente $compactCode."
+        PortDayClass.SABATO -> "sabato, viene selezionata automaticamente la variante $compactCode."
+        PortDayClass.FESTIVO -> "giorno festivo, viene selezionata automaticamente la variante $compactCode."
+        PortDayClass.SEMIFESTIVO -> "semifestivo, viene applicata automaticamente la variante festiva $compactCode."
     }
     return QuickShiftResolution(kind, effectiveClass, ruleCode, compactCode, explanation)
 }
@@ -89,30 +139,54 @@ internal fun applyQuickTurnSelection(
     rules: List<AllowanceRuleEntity>,
     kind: QuickShiftKind,
     date: LocalDate,
-    overrideClass: PortDayClass? = null
+    overrideClass: PortDayClass? = null,
+    performanceType: PerformanceType = PerformanceType.TURNO
 ): Set<Long> {
-    val resolution = resolveQuickShift(kind, date, overrideClass)
+    if (performanceType == PerformanceType.MEZZO_DOPPIO) return currentIds
+
+    val resolution = resolveQuickShift(kind, date, overrideClass, performanceType)
     val target = rules.firstOrNull {
-        it.enabled && it.code == resolution.ruleCode && (it.performanceMask and PerformanceType.TURNO.maskBit) != 0
+        it.enabled &&
+            it.code == resolution.ruleCode &&
+            (it.performanceMask and performanceType.maskBit) != 0
     } ?: return currentIds
 
-    val turnGroupIds = rules.asSequence()
-        .filter { it.exclusiveGroup == "TIPO_TURNO" && (it.performanceMask and PerformanceType.TURNO.maskBit) != 0 }
+    val groupName = when (performanceType) {
+        PerformanceType.TURNO -> "TIPO_TURNO"
+        PerformanceType.DOPPIO -> "DOPPIO"
+        PerformanceType.MEZZO_DOPPIO -> return currentIds
+    }
+    val groupIds = rules.asSequence()
+        .filter { it.exclusiveGroup == groupName && (it.performanceMask and performanceType.maskBit) != 0 }
         .map { it.id }
         .toSet()
 
-    return currentIds.filterNotTo(mutableSetOf()) { it in turnGroupIds }.also { it += target.id }
+    return currentIds.filterNotTo(mutableSetOf()) { it in groupIds }.also { it += target.id }
 }
 
-internal fun inferQuickShiftKind(selectedIds: Set<Long>, rules: List<AllowanceRuleEntity>): QuickShiftKind? {
-    val code = rules.firstOrNull { it.id in selectedIds && it.exclusiveGroup == "TIPO_TURNO" }?.code ?: return null
+internal fun inferQuickShiftKind(
+    selectedIds: Set<Long>,
+    rules: List<AllowanceRuleEntity>,
+    performanceType: PerformanceType = PerformanceType.TURNO
+): QuickShiftKind? {
+    val groupName = when (performanceType) {
+        PerformanceType.TURNO -> "TIPO_TURNO"
+        PerformanceType.DOPPIO -> "DOPPIO"
+        PerformanceType.MEZZO_DOPPIO -> return null
+    }
+    val code = rules.firstOrNull {
+        it.id in selectedIds &&
+            it.exclusiveGroup == groupName &&
+            (it.performanceMask and performanceType.maskBit) != 0
+    }?.code ?: return null
+
     return when (code) {
         "MAT", "MATF" -> QuickShiftKind.MATTINA
-        "POM", "POMS", "POMF" -> QuickShiftKind.POMERIGGIO
-        "SERA", "SERAS", "SERAF" -> QuickShiftKind.SERA
-        "SERA2", "SERAS2", "SERAF2" -> QuickShiftKind.SERA2
+        "POM", "POMS", "POMF", "DOP_POM", "DOP_POMS", "DOP_POMF" -> QuickShiftKind.POMERIGGIO
+        "SERA", "SERAS", "SERAF", "DOP_SERA", "DOP_SERAS", "DOP_SERAF" -> QuickShiftKind.SERA
+        "SERA2", "SERAS2", "SERAF2", "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2" -> QuickShiftKind.SERA2
         "NOTTE", "NOTTEF" -> QuickShiftKind.NOTTE
-        "G" -> QuickShiftKind.GIORNALIERO
+        "G", "DOP_G" -> QuickShiftKind.GIORNALIERO
         else -> null
     }
 }
