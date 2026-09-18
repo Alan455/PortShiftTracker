@@ -26,6 +26,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,7 +71,8 @@ internal fun PresetQuickBar(
 ) {
     val context = LocalContext.current
     val store = remember(context) { AppFeatureStore(context) }
-    var presets by remember { mutableStateOf(store.presets()) }
+    val presets by store.presetsFlow.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
     var naming by remember { mutableStateOf(false) }
     var presetName by remember { mutableStateOf("") }
 
@@ -132,17 +135,18 @@ internal fun PresetQuickBar(
                 TextButton(onClick = {
                     val categories = setOf(AllowanceCategory.AREA, AllowanceCategory.DISAGIO, AllowanceCategory.AVVIAMENTO)
                     val codes = rules.filter { it.id in selectedIds && it.category in categories }.map { it.code }.toSet()
-                    store.upsertPreset(
-                        ShiftPreset(
-                            id = UUID.randomUUID().toString(),
-                            name = presetName.ifBlank { role.ifBlank { "Preset" } },
-                            role = role,
-                            ruleCodes = codes
+                    scope.launch {
+                        store.upsertPreset(
+                            ShiftPreset(
+                                id = UUID.randomUUID().toString(),
+                                name = presetName.ifBlank { role.ifBlank { "Preset" } },
+                                role = role,
+                                ruleCodes = codes
+                            )
                         )
-                    )
-                    presets = store.presets()
-                    presetName = ""
-                    naming = false
+                        presetName = ""
+                        naming = false
+                    }
                 }) { Text("Salva") }
             },
             dismissButton = { TextButton(onClick = { naming = false }) { Text("Annulla") } }
@@ -154,7 +158,8 @@ internal fun PresetQuickBar(
 internal fun PresetSettingsCard() {
     val context = LocalContext.current
     val store = remember(context) { AppFeatureStore(context) }
-    var presets by remember { mutableStateOf(store.presets()) }
+    val presets by store.presetsFlow.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
 
     FeatureCard("Preset mansione / area") {
         Text(
@@ -180,8 +185,7 @@ internal fun PresetSettingsCard() {
                             )
                         }
                         TextButton(onClick = {
-                            store.deletePreset(preset.id)
-                            presets = store.presets()
+                            scope.launch { store.deletePreset(preset.id) }
                         }) { Text("Elimina") }
                     }
                 }
@@ -194,7 +198,8 @@ internal fun PresetSettingsCard() {
 internal fun SpecialCalendarSettingsCard() {
     val context = LocalContext.current
     val store = remember(context) { AppFeatureStore(context) }
-    var days by remember { mutableStateOf(store.specialDays()) }
+    val days by store.specialDaysFlow.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var label by remember { mutableStateOf("") }
@@ -224,8 +229,7 @@ internal fun SpecialCalendarSettingsCard() {
                         if (day.label.isNotBlank()) Text(day.label, style = MaterialTheme.typography.bodySmall)
                     }
                     TextButton(onClick = {
-                        store.deleteSpecialDay(day.epochDay)
-                        days = store.specialDays()
+                        scope.launch { store.deleteSpecialDay(day.epochDay) }
                     }) { Text("Elimina") }
                 }
             }
@@ -260,9 +264,10 @@ internal fun SpecialCalendarSettingsCard() {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    store.upsertSpecialDay(SpecialDayOverride(selectedDate.toEpochDay(), label, dayClass))
-                    days = store.specialDays()
-                    editing = false
+                    scope.launch {
+                        store.upsertSpecialDay(SpecialDayOverride(selectedDate.toEpochDay(), label, dayClass))
+                        editing = false
+                    }
                 }) { Text("Salva") }
             },
             dismissButton = { TextButton(onClick = { editing = false }) { Text("Annulla") } }
@@ -278,19 +283,33 @@ internal fun PayslipComparisonCard(
 ) {
     val context = LocalContext.current
     val store = remember(context) { AppFeatureStore(context) }
+    val scope = rememberCoroutineScope()
     val totals = remember(rows, rules) { monthlyCategoryTotals(rows, rules) }
-    val existing = remember(month) { store.payslip(month) }
+    val payslips by store.payslipsFlow.collectAsState(initial = emptyList())
+    val existing = payslips.firstOrNull { it.month == month.toString() }
 
-    var totalText by remember(month) { mutableStateOf(existing?.totalCents.toEuroInput()) }
-    var baseText by remember(month) { mutableStateOf(existing?.baseCents.toEuroInput()) }
-    var turnoText by remember(month) { mutableStateOf(existing?.turnoCents.toEuroInput()) }
-    var avvText by remember(month) { mutableStateOf(existing?.avviamentoCents.toEuroInput()) }
-    var disagioText by remember(month) { mutableStateOf(existing?.disagioCents.toEuroInput()) }
-    var areaText by remember(month) { mutableStateOf(existing?.areaCents.toEuroInput()) }
-    var doppioText by remember(month) { mutableStateOf(existing?.doppioCents.toEuroInput()) }
-    var altreText by remember(month) { mutableStateOf(existing?.altreCents.toEuroInput()) }
+    var totalText by remember(month) { mutableStateOf("") }
+    var baseText by remember(month) { mutableStateOf("") }
+    var turnoText by remember(month) { mutableStateOf("") }
+    var avvText by remember(month) { mutableStateOf("") }
+    var disagioText by remember(month) { mutableStateOf("") }
+    var areaText by remember(month) { mutableStateOf("") }
+    var doppioText by remember(month) { mutableStateOf("") }
+    var altreText by remember(month) { mutableStateOf("") }
     var expanded by remember(month) { mutableStateOf(false) }
     var saved by remember(month) { mutableStateOf(false) }
+
+    LaunchedEffect(month, existing) {
+        totalText = existing?.totalCents.toEuroInput()
+        baseText = existing?.baseCents.toEuroInput()
+        turnoText = existing?.turnoCents.toEuroInput()
+        avvText = existing?.avviamentoCents.toEuroInput()
+        disagioText = existing?.disagioCents.toEuroInput()
+        areaText = existing?.areaCents.toEuroInput()
+        doppioText = existing?.doppioCents.toEuroInput()
+        altreText = existing?.altreCents.toEuroInput()
+        saved = false
+    }
 
     FeatureCard("Confronto con busta paga") {
         val actual = parseEuro(totalText)
@@ -313,20 +332,22 @@ internal fun PayslipComparisonCard(
         }
         Button(
             onClick = {
-                store.savePayslip(
-                    PayslipComparison(
-                        month = month.toString(),
-                        totalCents = parseEuro(totalText),
-                        baseCents = parseEuro(baseText),
-                        turnoCents = parseEuro(turnoText),
-                        avviamentoCents = parseEuro(avvText),
-                        disagioCents = parseEuro(disagioText),
-                        areaCents = parseEuro(areaText),
-                        doppioCents = parseEuro(doppioText),
-                        altreCents = parseEuro(altreText)
+                scope.launch {
+                    store.savePayslip(
+                        PayslipComparison(
+                            month = month.toString(),
+                            totalCents = parseEuro(totalText),
+                            baseCents = parseEuro(baseText),
+                            turnoCents = parseEuro(turnoText),
+                            avviamentoCents = parseEuro(avvText),
+                            disagioCents = parseEuro(disagioText),
+                            areaCents = parseEuro(areaText),
+                            doppioCents = parseEuro(doppioText),
+                            altreCents = parseEuro(altreText)
+                        )
                     )
-                )
-                saved = true
+                    saved = true
+                }
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Salva confronto") }
