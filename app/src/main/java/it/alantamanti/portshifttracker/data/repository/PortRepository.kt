@@ -134,10 +134,15 @@ class PortRepository(
 
     private suspend fun ensureNoDuplicate(shift: ShiftEntity, excludeId: Long = 0) {
         val date = localDateOf(shift)
+        val zone = ZoneId.of(shift.zoneId)
+        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val duplicate = shiftDao.findSameTypeInDay(
             workerId = shift.workerId,
             performanceType = shift.performanceType,
             serviceEpochDay = shift.serviceEpochDay ?: date.toEpochDay(),
+            startInclusive = start,
+            endExclusive = end,
             excludeId = excludeId
         )
         if (duplicate != null) throw DuplicatePerformanceException(date, shift.performanceType)
