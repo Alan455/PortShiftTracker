@@ -46,7 +46,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: PortShiftTracker-v0.7.1-debug-apk
+          name: PortShiftTracker-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
@@ -68,6 +68,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             mkdir -p screenshots
+            gradle --stacktrace connectedDebugAndroidTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n it.alantamanti.portshifttracker/.MainActivity
             sleep 5
@@ -78,6 +79,6 @@ jobs:
       - name: Upload UI screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: PortShiftTracker-v0.7.1-ui-preview
+          name: PortShiftTracker-ui-preview
           path: screenshots
           if-no-files-found: warn
