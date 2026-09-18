@@ -68,57 +68,6 @@ internal fun calendarShiftCode(row: ShiftWithPay): String = when (row.shift.perf
     }
 }
 
-internal fun calendarDisplayCode(row: ShiftWithPay): String {
-    val searchable = row.selectedRules.joinToString(" ") { "${it.code} ${it.name}" }.uppercase()
-    val absenceCode = when {
-        "FERIE" in searchable -> "Ff"
-        "MALATT" in searchable -> "Mm"
-        "DONAZ" in searchable || "SANGUE" in searchable -> "Ds"
-        "CONGED" in searchable -> "PC"
-        "INAIL" in searchable || "INFORTUN" in searchable -> "II"
-        else -> null
-    }
-    if (absenceCode != null) return absenceCode
-
-    val turnRule = row.selectedRules.firstOrNull {
-        it.category == AllowanceCategory.TURNO ||
-            it.category == AllowanceCategory.DOPPIO ||
-            it.category == AllowanceCategory.MEZZO_TURNO
-    }
-    val turnKey = turnRule?.let { "${it.code} ${it.name}".uppercase() }.orEmpty()
-    val shiftCode = when {
-        "SERA2" in turnKey || "SERA 2" in turnKey || "S2" in turnKey -> "S2"
-        "POM" in turnKey -> "P"
-        "NOTTE" in turnKey -> "N"
-        "MAT" in turnKey -> "M"
-        "SERA" in turnKey -> "S"
-        else -> null
-    }
-
-    return when (row.shift.performanceType) {
-        PerformanceType.MEZZO_DOPPIO -> shiftCode?.let { "½$it" } ?: "½×"
-        PerformanceType.DOPPIO -> shiftCode ?: "2×"
-        PerformanceType.TURNO -> shiftCode ?: calendarShiftCode(row)
-    }
-}
-
-internal fun calendarDisplayLabel(row: ShiftWithPay): String = when (val code = calendarDisplayCode(row)) {
-    "M" -> "Turno Mattina"
-    "P" -> "Turno Pomeriggio"
-    "S" -> "Turno Sera"
-    "S2" -> "Turno Sera 2"
-    "N" -> "Turno Notte"
-    "Ff" -> "Ferie"
-    "Mm" -> "Malattia"
-    "Ds" -> "Donazione sangue"
-    "PC" -> "Congedo"
-    "II" -> "INAIL"
-    "½P" -> "Mezzo Doppio Pomeriggio"
-    "½S" -> "Mezzo Doppio Sera"
-    "½S2" -> "Mezzo Doppio Sera 2"
-    else -> mainAllowanceName(row)?.let { "Turno $it" } ?: performanceLabel(row.shift.performanceType)
-}
-
 internal data class MonthlyCategoryTotals(
     val base: Long,
     val turno: Long,
