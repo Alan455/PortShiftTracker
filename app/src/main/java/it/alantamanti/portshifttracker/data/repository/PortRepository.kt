@@ -32,11 +32,30 @@ class PortRepository(
     val selections: Flow<List<ShiftAllowanceSelectionEntity>> = selectionDao.observeAll()
 
     val shiftRows: Flow<List<ShiftWithPay>> = combine(workers, shifts, rules, selections) { ws, ss, rs, sels ->
+        buildRows(ws, ss, rs, sels)
+    }
+
+    fun shiftRowsBetween(startInclusive: Long, endExclusive: Long): Flow<List<ShiftWithPay>> =
+        combine(
+            workers,
+            shiftDao.observeBetween(startInclusive, endExclusive),
+            rules,
+            selectionDao.observeForShiftRange(startInclusive, endExclusive)
+        ) { ws, ss, rs, sels ->
+            buildRows(ws, ss, rs, sels)
+        }
+
+    private fun buildRows(
+        ws: List<WorkerEntity>,
+        ss: List<ShiftEntity>,
+        rs: List<AllowanceRuleEntity>,
+        sels: List<ShiftAllowanceSelectionEntity>
+    ): List<ShiftWithPay> {
         val workerMap = ws.associateBy { it.id }
         val rulesById = rs.associateBy { it.id }
         val selectedByShift = sels.groupBy { it.shiftId }.mapValues { (_, rows) -> rows.map { it.ruleId }.toSet() }
 
-        ss.mapNotNull { shift ->
+        return ss.mapNotNull { shift ->
             val worker = workerMap[shift.workerId] ?: return@mapNotNull null
             val selectedIds = normalizeSelectedRuleIds(
                 shift.performanceType,
@@ -73,7 +92,8 @@ class PortRepository(
         val seen = mutableSetOf<Triple<Long, LocalDate, it.alantamanti.portshifttracker.domain.PerformanceType>>()
         val result = mutableListOf<Long>()
 
-        shifts.forEach { shift ->
+        shifts.forEach { rawShift ->
+            val shift = canonicalShift(rawShift)
             val date = localDateOf(shift)
             val key = Triple(shift.workerId, date, shift.performanceType)
             if (!seen.add(key)) throw DuplicatePerformanceException(date, shift.performanceType)
@@ -98,29 +118,26 @@ class PortRepository(
         selectedRuleIds: Set<Long>
     ) = db.withTransaction {
         val allRules = ruleDao.getAll()
-        ensureNoDuplicate(shift, excludeId = shift.id)
-        val normalized = normalizeSelectedRuleIds(shift.performanceType, selectedRuleIds, allRules)
+        val canonical = canonicalShift(shift)
+        ensureNoDuplicate(canonical, excludeId = canonical.id)
+        val normalized = normalizeSelectedRuleIds(canonical.performanceType, selectedRuleIds, allRules)
         selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
             throw IllegalArgumentException(it)
         }
 
-        shiftDao.update(shift)
-        selectionDao.deleteForShift(shift.id)
+        shiftDao.update(canonical)
+        selectionDao.deleteForShift(canonical.id)
         if (normalized.isNotEmpty()) {
-            selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(shift.id, it) })
+            selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(canonical.id, it) })
         }
     }
 
     private suspend fun ensureNoDuplicate(shift: ShiftEntity, excludeId: Long = 0) {
-        val zone = ZoneId.of(shift.zoneId)
         val date = localDateOf(shift)
-        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val duplicate = shiftDao.findSameTypeInDay(
             workerId = shift.workerId,
             performanceType = shift.performanceType,
-            startInclusive = start,
-            endExclusive = end,
+            serviceEpochDay = shift.serviceEpochDay ?: date.toEpochDay(),
             excludeId = excludeId
         )
         if (duplicate != null) throw DuplicatePerformanceException(date, shift.performanceType)
@@ -129,7 +146,19 @@ class PortRepository(
     private fun localDateOf(shift: ShiftEntity): LocalDate =
         Instant.ofEpochMilli(shift.startEpochMillis).atZone(ZoneId.of(shift.zoneId)).toLocalDate()
 
+    private fun canonicalShift(shift: ShiftEntity): ShiftEntity =
+        shift.copy(serviceEpochDay = localDateOf(shift).toEpochDay())
+
     suspend fun deleteShift(shift: ShiftEntity) = shiftDao.delete(shift)
+
+    suspend fun restoreDeletedShift(shift: ShiftEntity, selectedRuleIds: Set<Long>) = db.withTransaction {
+        val canonical = canonicalShift(shift)
+        shiftDao.insert(canonical)
+        if (selectedRuleIds.isNotEmpty()) {
+            selectionDao.insertAll(selectedRuleIds.map { ShiftAllowanceSelectionEntity(canonical.id, it) })
+        }
+    }
+
     suspend fun saveRule(rule: AllowanceRuleEntity) = ruleDao.upsert(rule)
     suspend fun deleteRule(rule: AllowanceRuleEntity) = ruleDao.delete(rule)
 
