@@ -35,17 +35,22 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts ORDER BY id")
     suspend fun getAll(): List<ShiftEntity>
 
+    @Query("SELECT * FROM shifts WHERE serviceEpochDay IS NULL ORDER BY startEpochMillis")
+    suspend fun getWithoutServiceDay(): List<ShiftEntity>
+
+    @Query("SELECT * FROM shifts WHERE startEpochMillis >= :startInclusive AND startEpochMillis < :endExclusive ORDER BY startEpochMillis DESC")
+    fun observeBetween(startInclusive: Long, endExclusive: Long): Flow<List<ShiftEntity>>
+
     @Query(
         "SELECT * FROM shifts WHERE workerId = :workerId " +
             "AND performanceType = :performanceType " +
-            "AND startEpochMillis >= :startInclusive AND startEpochMillis < :endExclusive " +
+            "AND serviceEpochDay = :serviceEpochDay " +
             "AND id != :excludeId LIMIT 1"
     )
     suspend fun findSameTypeInDay(
         workerId: Long,
         performanceType: it.alantamanti.portshifttracker.domain.PerformanceType,
-        startInclusive: Long,
-        endExclusive: Long,
+        serviceEpochDay: Long,
         excludeId: Long = 0
     ): ShiftEntity?
 
@@ -100,6 +105,13 @@ interface ShiftAllowanceSelectionDao {
 
     @Query("SELECT * FROM shift_allowance_selections ORDER BY shiftId, ruleId")
     suspend fun getAll(): List<ShiftAllowanceSelectionEntity>
+
+    @Query(
+        "SELECT sas.* FROM shift_allowance_selections sas " +
+            "INNER JOIN shifts s ON s.id = sas.shiftId " +
+            "WHERE s.startEpochMillis >= :startInclusive AND s.startEpochMillis < :endExclusive"
+    )
+    fun observeForShiftRange(startInclusive: Long, endExclusive: Long): Flow<List<ShiftAllowanceSelectionEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(rows: List<ShiftAllowanceSelectionEntity>)
