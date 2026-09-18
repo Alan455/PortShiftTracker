@@ -101,6 +101,7 @@ internal fun ShiftEditorScreen(
     initialDate: LocalDate,
     initialShift: ShiftEntity?,
     initialSelectedIds: Set<Long>,
+    isCopy: Boolean = false,
     historyRows: List<ShiftWithPay>,
     specialDays: List<SpecialDayOverride>,
     onDismiss: () -> Unit,
@@ -163,10 +164,10 @@ internal fun ShiftEditorScreen(
     val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
     val recentRoleOptions = remember(historyRows, editorDate) { recentRoles(historyRows, editorDate) }
     val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
-        if (initialShift == null) lastRepeatCandidate(historyRows, editorDate) else null
+        if (initialShift == null && !isCopy) lastRepeatCandidate(historyRows, editorDate) else null
     }
     val absenceRule = selectedRules.firstOrNull { it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" }
-    val rangeEnabled = initialShift == null && absenceRule != null
+    val rangeEnabled = initialShift == null && !isCopy && absenceRule != null
     val effectiveRangeEnd = if (rangeEndDate.isBefore(editorDate)) editorDate else rangeEndDate
     val selectedTags = selectedRules.flatMap { parseTags(it.tagsCsv) }.toSet()
     val relationWarnings = selectedRules.mapNotNull { rule ->
@@ -185,7 +186,7 @@ internal fun ShiftEditorScreen(
 
     val draftShift = remember(startText, endText, role, notes, performanceType, initialShift?.id) {
         parseShiftOrNull(
-            id = initialShift?.id ?: 0,
+            id = if (isCopy) 0 else initialShift?.id ?: 0,
             workerId = worker.id,
             startText = startText,
             endText = endText,
@@ -223,7 +224,13 @@ internal fun ShiftEditorScreen(
                         },
                         title = {
                             Column {
-                                Text(if (initialShift == null) "Nuova prestazione" else "Modifica prestazione")
+                                Text(
+                                    when {
+                                        isCopy -> "Copia prestazione"
+                                        initialShift == null -> "Nuova prestazione"
+                                        else -> "Modifica prestazione"
+                                    }
+                                )
                                 Text(
                                     italianTitle(editorDate.format(shortDayFormatter)),
                                     style = MaterialTheme.typography.labelSmall,
@@ -315,6 +322,7 @@ internal fun ShiftEditorScreen(
                                 Text(
                                     when {
                                         saving -> "Salvataggio…"
+                                        isCopy -> "Salva copia"
                                         initialShift != null -> "Salva modifiche"
                                         rangeEnabled -> "Salva periodo ${absenceRule.name}"
                                         else -> "Salva prestazione"
