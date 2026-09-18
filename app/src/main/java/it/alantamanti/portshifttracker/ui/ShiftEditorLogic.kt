@@ -2,6 +2,7 @@ package it.alantamanti.portshifttracker.ui
 
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
+import it.alantamanti.portshifttracker.data.repository.normalizeSelectedRuleIds
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.PayBreakdown
 import it.alantamanti.portshifttracker.domain.PerformanceType
@@ -107,3 +108,79 @@ private fun signedMoney(cents: Long): String =
     if (cents >= 0) "+${moneyCompact(cents)}" else "-${moneyCompact(-cents)}"
 
 private fun moneyCompact(cents: Long): String = "€ %.2f".format(Locale.ITALY, cents / 100.0)
+
+
+internal fun recentRoles(
+    rows: List<ShiftWithPay>,
+    currentDate: LocalDate,
+    limit: Int = 5
+): List<String> {
+    val scores = mutableMapOf<String, Int>()
+    val display = mutableMapOf<String, String>()
+    rows.forEach { row ->
+        val value = row.shift.role.trim()
+        if (value.isBlank()) return@forEach
+        val key = value.lowercase(Locale.ITALIAN)
+        val date = Instant.ofEpochMilli(row.shift.startEpochMillis)
+            .atZone(ZoneId.of(row.shift.zoneId))
+            .toLocalDate()
+        val age = kotlin.math.abs(ChronoUnit.DAYS.between(date, currentDate))
+        val score = when {
+            age <= 14 -> 50
+            age <= 60 -> 25
+            age <= 180 -> 10
+            else -> 2
+        }
+        scores[key] = (scores[key] ?: 0) + score
+        display[key] = value
+    }
+    return scores.entries
+        .sortedByDescending { it.value }
+        .take(limit)
+        .mapNotNull { display[it.key] }
+}
+
+internal fun lastRepeatCandidate(
+    rows: List<ShiftWithPay>,
+    currentDate: LocalDate
+): ShiftWithPay? = rows
+    .filter { row ->
+        val date = Instant.ofEpochMilli(row.shift.startEpochMillis)
+            .atZone(ZoneId.of(row.shift.zoneId))
+            .toLocalDate()
+        !date.isAfter(currentDate)
+    }
+    .maxByOrNull { it.shift.startEpochMillis }
+
+internal fun repeatSelectionForDate(
+    source: ShiftWithPay,
+    rules: List<AllowanceRuleEntity>,
+    targetDate: LocalDate,
+    overrideClass: PortDayClass?
+): Pair<Set<Long>, QuickShiftKind?> {
+    val type = source.shift.performanceType
+    val sourceIds = source.selectedRules.map { it.id }.toSet()
+    val kind = inferQuickShiftKind(sourceIds, rules, type)
+
+    if (kind == null || type == PerformanceType.MEZZO_DOPPIO) {
+        return normalizeSelectedRuleIds(type, sourceIds, rules) to null
+    }
+
+    val primaryCategory = if (type == PerformanceType.TURNO) {
+        AllowanceCategory.TURNO
+    } else {
+        AllowanceCategory.DOPPIO
+    }
+    val preserved = sourceIds.filterTo(mutableSetOf()) { id ->
+        rules.firstOrNull { it.id == id }?.category != primaryCategory
+    }
+    val reapplied = applyQuickTurnSelection(
+        currentIds = preserved,
+        rules = rules,
+        kind = kind,
+        date = targetDate,
+        overrideClass = overrideClass,
+        performanceType = type
+    )
+    return normalizeSelectedRuleIds(type, reapplied, rules) to kind
+}
