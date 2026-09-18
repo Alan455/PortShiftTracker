@@ -67,7 +67,11 @@ internal fun QuickShiftPanel(
                     Text(dayLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (performanceType == PerformanceType.DOPPIO && doubleBaseCents != null) {
                         Text(
-                            "Base ${moneyQuick(doubleBaseCents)} + maggiorazione ${dayClass.label.lowercase(Locale.ITALIAN)} automatica",
+                            if (selectedKind == QuickShiftKind.GIORNALIERO) {
+                                "Mezzo Giornaliero: base fissa € 45,00"
+                            } else {
+                                "Base ${moneyQuick(doubleBaseCents)} + maggiorazione ${dayClass.label.lowercase(Locale.ITALIAN)} automatica"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -187,6 +191,7 @@ private fun QuickShiftTile(
                     QuickShiftKind.POMERIGGIO -> "Pom"
                     QuickShiftKind.SERA -> "Sera"
                     QuickShiftKind.SERA2 -> "Sera2"
+                    QuickShiftKind.GIORNALIERO -> "½ Giornaliero"
                     else -> kind.label
                 }
             } else kind.label
@@ -210,7 +215,13 @@ private fun QuickShiftTile(
             Text(
                 rule?.let {
                     val amount = moneyQuick(it.value)
-                    if (performanceType == PerformanceType.DOPPIO) "+$amount" else amount
+                    when {
+                        performanceType == PerformanceType.DOPPIO &&
+                            kind == QuickShiftKind.GIORNALIERO -> "Base $amount"
+                        performanceType == PerformanceType.DOPPIO -> "+$amount"
+                        kind == QuickShiftKind.GIORNALIERO -> "Base $amount"
+                        else -> amount
+                    }
                 } ?: "non disponibile",
                 style = if (performanceType == PerformanceType.DOPPIO)
                     MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall,
