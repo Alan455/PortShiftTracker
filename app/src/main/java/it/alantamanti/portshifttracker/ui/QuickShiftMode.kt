@@ -32,11 +32,18 @@ internal data class QuickShiftResolution(
 )
 
 internal fun quickShiftKindsFor(performanceType: PerformanceType): List<QuickShiftKind> = when (performanceType) {
-    PerformanceType.TURNO -> QuickShiftKind.entries
+    PerformanceType.TURNO -> listOf(
+        QuickShiftKind.MATTINA,
+        QuickShiftKind.POMERIGGIO,
+        QuickShiftKind.SERA,
+        QuickShiftKind.SERA2,
+        QuickShiftKind.NOTTE
+    )
     PerformanceType.DOPPIO -> listOf(
         QuickShiftKind.POMERIGGIO,
         QuickShiftKind.SERA,
-        QuickShiftKind.SERA2
+        QuickShiftKind.SERA2,
+        QuickShiftKind.GIORNALIERO
     )
     PerformanceType.MEZZO_DOPPIO -> emptyList()
 }
@@ -113,7 +120,7 @@ internal fun resolveQuickShift(
                 else -> "DOP_SERA2" to "Sera2"
             }
 
-            QuickShiftKind.GIORNALIERO -> "DOP_G" to "G"
+            QuickShiftKind.GIORNALIERO -> "DOP_G" to "½G"
 
             QuickShiftKind.MATTINA, QuickShiftKind.NOTTE ->
                 error("${kind.label} non è previsto nell'inserimento rapido del Doppio")
@@ -124,7 +131,13 @@ internal fun resolveQuickShift(
     }
 
     val prefix = if (overrideClass != null) "Calendario speciale: " else ""
-    val explanation = prefix + when (effectiveClass) {
+    val explanation = if (kind == QuickShiftKind.GIORNALIERO) {
+        if (performanceType == PerformanceType.DOPPIO) {
+            "Mezzo Giornaliero: base fissa €45, senza Mezza IMA e senza Polivalenza."
+        } else {
+            "Giornaliero: base fissa €90; con ONMezzo la base diventa €45."
+        }
+    } else prefix + when (effectiveClass) {
         PortDayClass.FERIALE -> "giorno feriale, viene selezionato automaticamente $compactCode."
         PortDayClass.SABATO -> "sabato, viene selezionata automaticamente la variante $compactCode."
         PortDayClass.FESTIVO -> "giorno festivo, viene selezionata automaticamente la variante $compactCode."
