@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /betaLicenses/{email} {
+      allow get: if request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == email
+        && resource.data.enabled == true
+        && request.time < resource.data.expiresAt;
+
+      allow list, create, update, delete: if false;
+    }
+  }
+}
