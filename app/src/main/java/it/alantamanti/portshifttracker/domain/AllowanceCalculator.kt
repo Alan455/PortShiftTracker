@@ -28,12 +28,31 @@ class AllowanceCalculator {
             PerformanceType.MEZZO_DOPPIO -> (worker.doubleBaseCents / 2.0).roundToLong()
         }
 
+        // Relazione obbligatoria del motore: TUMezzo/ONmezzo implicano sempre
+        // Mezza IMA. In questo modo anche import, backup o chiamate al calcolatore che
+        // bypassano la UI producono un risultato coerente.
+        val normalizedSelectedManualRuleIds = selectedManualRuleIds.toMutableSet().also { ids ->
+            if (shift.performanceType == PerformanceType.TURNO) {
+                val halfTurnSelected = rules.any {
+                    it.id in ids && (it.code == "DOP_TU_MEZZO" || it.code == "DOP_ON_MEZZO")
+                }
+                val mezzaIma = rules.firstOrNull {
+                    it.enabled &&
+                        it.code == "ALT_MEZZA_IMA" &&
+                        (it.performanceMask and PerformanceType.TURNO.maskBit) != 0
+                }
+                if (mezzaIma != null) {
+                    if (halfTurnSelected) ids += mezzaIma.id else ids -= mezzaIma.id
+                }
+            }
+        }
+
         // La maschera rende la compatibilità configurabile: area/disagi possono valere
         // sia per turno sia per doppio, mentre Polivalenza vale solo per il turno ordinario.
         val enabledCompatibleRules = rules.filter {
             it.enabled && (it.performanceMask and shift.performanceType.maskBit) != 0
         }
-        val selectedRules = enabledCompatibleRules.filter { it.id in selectedManualRuleIds }
+        val selectedRules = enabledCompatibleRules.filter { it.id in normalizedSelectedManualRuleIds }
 
         // Polivalenza: solo prestazione TURNO e solo quando esiste una vera indennità di turno.
         // Il Doppio non la riceve mai, anche se nello stesso giorno esiste anche un turno ordinario.
@@ -44,7 +63,7 @@ class AllowanceCalculator {
             .asSequence()
             .filter { rule ->
                 when (rule.applicationMode) {
-                    AllowanceApplicationMode.MANUAL -> rule.id in selectedManualRuleIds
+                    AllowanceApplicationMode.MANUAL -> rule.id in normalizedSelectedManualRuleIds
                     AllowanceApplicationMode.AUTO -> when (rule.autoTrigger) {
                         AllowanceAutoTrigger.NONE -> true
                         AllowanceAutoTrigger.WHEN_TURNO_SELECTED -> hasWorkedTurnWithTurnAllowance
