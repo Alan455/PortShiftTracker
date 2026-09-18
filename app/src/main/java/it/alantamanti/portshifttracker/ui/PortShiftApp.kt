@@ -886,7 +886,7 @@ private fun ShiftEditorScreen(
                                     when {
                                         saving -> "Salvataggio…"
                                         initialShift != null -> "Salva modifiche"
-                                        rangeEnabled -> "Salva periodo ${absenceRule?.name.orEmpty()}"
+                                        rangeEnabled -> "Salva periodo ${absenceRule.name}"
                                         else -> "Salva prestazione"
                                     },
                                     fontWeight = FontWeight.SemiBold
