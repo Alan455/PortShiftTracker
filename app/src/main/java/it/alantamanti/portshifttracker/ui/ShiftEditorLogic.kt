@@ -161,9 +161,13 @@ internal fun repeatSelectionForDate(
 ): Pair<Set<Long>, QuickShiftKind?> {
     val type = source.shift.performanceType
     val sourceIds = source.selectedRules.map { it.id }.toSet()
-    val kind = inferQuickShiftKind(sourceIds, rules, type)
+    val kind = if (type == PerformanceType.MEZZO_DOPPIO) {
+        inferQuickShiftKind(sourceIds, rules, PerformanceType.DOPPIO)
+    } else {
+        inferQuickShiftKind(sourceIds, rules, type)
+    }
 
-    if (kind == null || type == PerformanceType.MEZZO_DOPPIO) {
+    if (kind == null) {
         return normalizeSelectedRuleIds(type, sourceIds, rules) to null
     }
 
@@ -175,14 +179,30 @@ internal fun repeatSelectionForDate(
     val preserved = sourceIds.filterTo(mutableSetOf()) { id ->
         rules.firstOrNull { it.id == id }?.category != primaryCategory
     }
-    val reapplied = applyQuickTurnSelection(
-        currentIds = preserved,
-        rules = rules,
-        kind = kind,
-        date = targetDate,
-        overrideClass = overrideClass,
-        performanceType = type
-    )
+
+    val reapplied = if (type == PerformanceType.MEZZO_DOPPIO) {
+        val resolution = resolveQuickShift(
+            kind = kind,
+            date = targetDate,
+            overrideClass = overrideClass,
+            performanceType = PerformanceType.DOPPIO
+        )
+        val target = rules.firstOrNull {
+            it.enabled &&
+                it.code == resolution.ruleCode &&
+                (it.performanceMask and PerformanceType.MEZZO_DOPPIO.maskBit) != 0
+        }
+        if (target == null) preserved else preserved + target.id
+    } else {
+        applyQuickTurnSelection(
+            currentIds = preserved,
+            rules = rules,
+            kind = kind,
+            date = targetDate,
+            overrideClass = overrideClass,
+            performanceType = type
+        )
+    }
     return normalizeSelectedRuleIds(type, reapplied, rules) to kind
 }
 
