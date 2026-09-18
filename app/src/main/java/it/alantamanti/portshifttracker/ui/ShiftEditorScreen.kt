@@ -161,6 +161,10 @@ internal fun ShiftEditorScreen(
         ruleUsageScores(historyRows, editorDate, performanceType, role)
     }
     val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
+    val recentRoleOptions = remember(historyRows, editorDate) { recentRoles(historyRows, editorDate) }
+    val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
+        if (initialShift == null) lastRepeatCandidate(historyRows, editorDate) else null
+    }
     val absenceRule = selectedRules.firstOrNull { it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" }
     val rangeEnabled = initialShift == null && absenceRule != null
     val effectiveRangeEnd = if (rangeEndDate.isBefore(editorDate)) editorDate else rangeEndDate
@@ -392,6 +396,62 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
+                    repeatCandidate?.let { source ->
+                        item {
+                            val sourceKind = inferQuickShiftKind(
+                                source.selectedRules.map { it.id }.toSet(),
+                                rules,
+                                source.shift.performanceType
+                            )
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer
+                            ) {
+                                Column(
+                                    Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        "Ripeti ultima configurazione",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        buildString {
+                                            append(performanceLabel(source.shift.performanceType))
+                                            sourceKind?.let { append(" · ${it.label}") }
+                                            source.shift.role.takeIf { it.isNotBlank() }?.let { append(" · $it") }
+                                            val extras = source.selectedRules.filterNot {
+                                                it.category == AllowanceCategory.TURNO ||
+                                                    it.category == AllowanceCategory.DOPPIO
+                                            }.take(3)
+                                            if (extras.isNotEmpty()) append(" · " + extras.joinToString(" · ") { it.name })
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    OutlinedButton(
+                                        onClick = {
+                                            performanceType = source.shift.performanceType
+                                            role = source.shift.role
+                                            val (ids, kind) = repeatSelectionForDate(
+                                                source = source,
+                                                rules = rules,
+                                                targetDate = editorDate,
+                                                overrideClass = specialOverrideClass
+                                            )
+                                            selectedIds = ids
+                                            quickKind = kind
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Applica")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (effectiveQuickMode) {
                         item {
                             QuickShiftPanel(
@@ -583,6 +643,26 @@ internal fun ShiftEditorScreen(
 
                     item {
                         EditorSectionCard(title = "Mansione e note") {
+                            if (recentRoleOptions.isNotEmpty()) {
+                                Text(
+                                    "Mansioni recenti",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(
+                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    recentRoleOptions.forEach { recentRole ->
+                                        FilterChip(
+                                            selected = role.equals(recentRole, ignoreCase = true),
+                                            onClick = { role = recentRole },
+                                            label = { Text(recentRole) }
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(6.dp))
+                            }
                             OutlinedTextField(
                                 value = role,
                                 onValueChange = { role = it },
