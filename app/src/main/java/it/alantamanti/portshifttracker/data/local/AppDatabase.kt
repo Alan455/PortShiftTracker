@@ -11,8 +11,8 @@ import androidx.room.TypeConverters
         AllowanceRuleEntity::class,
         ShiftAllowanceSelectionEntity::class
     ],
-    version = 6,
-    exportSchema = false
+    version = 7,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
