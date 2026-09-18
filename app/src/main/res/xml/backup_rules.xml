@@ -2,5 +2,4 @@
 <full-backup-content>
     <include domain="database" path="port_shift.db" />
     <include domain="file" path="datastore/" />
-    <exclude domain="sharedpref" path="portshift_features.xml" />
 </full-backup-content>
