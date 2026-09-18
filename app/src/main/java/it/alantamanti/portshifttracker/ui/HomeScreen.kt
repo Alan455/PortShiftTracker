@@ -220,7 +220,9 @@ internal fun HomeScreen(repository: PortRepository) {
                     ShiftCompactCard(
                         row = row,
                         onDetails = { detailRow = row },
-                        onEdit = { editingRow = row }
+                        onEdit = {
+                            runWithMonthConfirmation(rowDate(row)) { editingRow = row }
+                        }
                     )
                 }
                 item {
