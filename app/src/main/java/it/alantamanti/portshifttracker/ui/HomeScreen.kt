@@ -39,6 +39,9 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -95,24 +98,70 @@ import kotlin.math.roundToLong
 
 @Composable
 internal fun HomeScreen(repository: PortRepository) {
-    val rows by repository.shiftRows.collectAsState(initial = emptyList())
     val workers by repository.workers.collectAsState(initial = emptyList())
     val rules by repository.rules.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val featureStore = remember(context) { AppFeatureStore(context) }
     val specialDays by featureStore.specialDaysFlow.collectAsState(initial = emptyList())
+    val payslips by featureStore.payslipsFlow.collectAsState(initial = emptyList())
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var editorDate by remember { mutableStateOf<LocalDate?>(null) }
     var editingRow by remember { mutableStateOf<ShiftWithPay?>(null) }
     var detailRow by remember { mutableStateOf<ShiftWithPay?>(null) }
+    var copyDraft by remember { mutableStateOf<Pair<ShiftWithPay, ShiftEntity>?>(null) }
+    var pendingLockedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val rowsByDate = remember(rows) { rows.groupBy(::rowDate) }
+    val zone = remember { ZoneId.of("Europe/Rome") }
+    val monthStartMillis = remember(month) { month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+    val monthEndMillis = remember(month) { month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+    val monthRowsFlow = remember(monthStartMillis, monthEndMillis) {
+        repository.shiftRowsBetween(monthStartMillis, monthEndMillis)
+    }
+    val monthRows by monthRowsFlow.collectAsState(initial = emptyList())
+
+    val historyStartMillis = remember(selectedDate) {
+        selectedDate.minusYears(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+    val historyEndMillis = remember(selectedDate) {
+        selectedDate.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+    val historyRowsFlow = remember(historyStartMillis, historyEndMillis) {
+        repository.shiftRowsBetween(historyStartMillis, historyEndMillis)
+    }
+    val historyRows by historyRowsFlow.collectAsState(initial = emptyList())
+
+    val rowsByDate = remember(monthRows) { monthRows.groupBy(::rowDate) }
     val dayRows = rowsByDate[selectedDate].orEmpty().sortedBy { it.shift.startEpochMillis }
-    val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
     val monthTotal = monthRows.sumOf { it.pay.totalPayCents }
+
+    fun isLocked(date: LocalDate): Boolean =
+        payslips.firstOrNull { it.month == YearMonth.from(date).toString() }?.locked == true
+
+    fun runWithMonthConfirmation(date: LocalDate, action: () -> Unit) {
+        if (isLocked(date)) pendingLockedAction = action else action()
+    }
+
+    fun openCopyPicker(row: ShiftWithPay) {
+        val sourceDate = rowDate(row)
+        val initial = if (selectedDate != sourceDate) selectedDate else sourceDate.plusDays(1)
+        DatePickerDialog(
+            context,
+            { _, year, monthValue, day ->
+                val target = LocalDate.of(year, monthValue + 1, day)
+                runWithMonthConfirmation(target) {
+                    copyDraft = row to copyShiftToDate(row.shift, target)
+                    detailRow = null
+                }
+            },
+            initial.year,
+            initial.monthValue - 1,
+            initial.dayOfMonth
+        ).show()
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -206,7 +255,9 @@ internal fun HomeScreen(repository: PortRepository) {
             tonalElevation = 3.dp
         ) {
             Button(
-                onClick = { editorDate = selectedDate },
+                onClick = {
+                    runWithMonthConfirmation(selectedDate) { editorDate = selectedDate }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -216,6 +267,32 @@ internal fun HomeScreen(repository: PortRepository) {
                 Text("＋  Aggiungi prestazione", fontWeight = FontWeight.SemiBold)
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 74.dp)
+        )
+    }
+
+    pendingLockedAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingLockedAction = null },
+            title = { Text("Mese chiuso") },
+            text = {
+                Text("Questo mese è già stato chiuso dopo il controllo con la busta paga. Vuoi modificare comunque i dati?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingLockedAction = null
+                    action()
+                }) { Text("Continua") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLockedAction = null }) { Text("Annulla") }
+            }
+        )
     }
 
     val worker = workers.firstOrNull()
@@ -226,7 +303,7 @@ internal fun HomeScreen(repository: PortRepository) {
             initialDate = editorDate!!,
             initialShift = null,
             initialSelectedIds = emptySet(),
-            historyRows = rows,
+            historyRows = historyRows,
             specialDays = specialDays,
             onDismiss = { editorDate = null },
             onSave = { shifts, selectedIds ->
@@ -259,17 +336,59 @@ internal fun HomeScreen(repository: PortRepository) {
         )
     }
 
+    copyDraft?.let { (source, copiedShift) ->
+        ShiftEditorScreen(
+            worker = source.worker,
+            rules = rules,
+            initialDate = rowDate(source),
+            initialShift = copiedShift,
+            initialSelectedIds = source.selectedRules.map { it.id }.toSet(),
+            isCopy = true,
+            historyRows = historyRows,
+            specialDays = specialDays,
+            onDismiss = { copyDraft = null },
+            onSave = { shifts, selectedIds ->
+                runCatching {
+                    repository.addShiftsWithSelections(shifts, selectedIds)
+                    Unit
+                }
+            }
+        )
+    }
+
     detailRow?.let { row ->
         ShiftDetailDialog(
             row = row,
             onDismiss = { detailRow = null },
             onEdit = {
-                detailRow = null
-                editingRow = row
+                runWithMonthConfirmation(rowDate(row)) {
+                    detailRow = null
+                    editingRow = row
+                }
+            },
+            onCopy = {
+                openCopyPicker(row)
             },
             onDelete = {
-                scope.launch { repository.deleteShift(row.shift) }
-                detailRow = null
+                runWithMonthConfirmation(rowDate(row)) {
+                    detailRow = null
+                    scope.launch {
+                        repository.deleteShift(row.shift)
+                        val result = snackbarHostState.showSnackbar(
+                            message = "Prestazione eliminata",
+                            actionLabel = "Annulla",
+                            withDismissAction = true
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            runCatching {
+                                repository.restoreDeletedShift(
+                                    row.shift,
+                                    row.selectedRules.map { it.id }.toSet()
+                                )
+                            }
+                        }
+                    }
+                }
             }
         )
     }
