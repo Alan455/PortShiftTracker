@@ -104,6 +104,41 @@ class AllowanceCalculatorTest {
         performanceMask = PerformanceType.TURNO.maskBit
     )
 
+    private val giornaliero = AllowanceRule(
+        id = 9,
+        name = "Giornaliero",
+        code = "G",
+        calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+        value = 9000,
+        category = AllowanceCategory.TURNO,
+        applicationMode = AllowanceApplicationMode.MANUAL,
+        basePayEffect = BasePayEffect.REPLACE_BASE,
+        performanceMask = PerformanceType.TURNO.maskBit
+    )
+    private val onMezzo = AllowanceRule(
+        id = 10,
+        name = "ONmezzo",
+        code = "DOP_ON_MEZZO",
+        calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+        value = 4350,
+        category = AllowanceCategory.MEZZO_TURNO,
+        applicationMode = AllowanceApplicationMode.MANUAL,
+        basePayEffect = BasePayEffect.REPLACE_BASE,
+        turnAllowanceMultiplierBasisPoints = 5000,
+        performanceMask = PerformanceType.TURNO.maskBit
+    )
+    private val mezzoGiornalieroDoppio = AllowanceRule(
+        id = 11,
+        name = "Mezzo Giornaliero",
+        code = "DOP_G",
+        calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+        value = 4500,
+        category = AllowanceCategory.DOPPIO,
+        applicationMode = AllowanceApplicationMode.MANUAL,
+        basePayEffect = BasePayEffect.REPLACE_BASE,
+        performanceMask = PerformanceType.DOPPIO.maskBit
+    )
+
     private val rules = listOf(turnoNotte, doppioSera, polivalenza, area, disagio, mezzaIma)
 
     @Test
@@ -173,6 +208,63 @@ class AllowanceCalculatorTest {
         assertFalse(pay.allowanceLines.any { it.name == "Polivalenza" })
         assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
         assertEquals(7306, pay.totalPayCents)
+    }
+
+
+    @Test
+    fun giornalieroUsaBase90ConPolivalenzaAreaEDisagio() {
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.TURNO, "2026-09-17T08:00:00", "2026-09-17T14:00:00"),
+            listOf(giornaliero, polivalenza, area, disagio),
+            setOf(giornaliero.id, area.id, disagio.id)
+        )
+
+        assertEquals(9000, pay.basePayCents)
+        assertTrue(pay.allowanceLines.any { it.name == "Polivalenza" && it.amountCents == 852L })
+        assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
+        assertTrue(pay.allowanceLines.any { it.name == "Tubi" && it.amountCents == 775L })
+        assertEquals(11957, pay.totalPayCents)
+    }
+
+    @Test
+    fun giornalieroConOnMezzoUsaBase45ConMezzaImaEPolivalenza() {
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.TURNO, "2026-09-17T08:00:00", "2026-09-17T11:00:00"),
+            listOf(giornaliero, onMezzo, mezzaIma, polivalenza, area, disagio),
+            setOf(giornaliero.id, onMezzo.id, area.id, disagio.id)
+        )
+
+        assertEquals(4500, pay.basePayCents)
+        assertTrue(pay.allowanceLines.any { it.name == "Mezza IMA" && it.amountCents == 2615L })
+        assertTrue(pay.allowanceLines.any { it.name == "Polivalenza" && it.amountCents == 852L })
+        assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
+        assertTrue(pay.allowanceLines.any { it.name == "Tubi" && it.amountCents == 775L })
+        assertEquals(10072, pay.totalPayCents)
+    }
+
+    @Test
+    fun mezzoGiornalieroNelDoppioUsaSoloBase45SenzaMezzaImaOPolivalenza() {
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.DOPPIO, "2026-09-17T14:00:00", "2026-09-17T20:00:00"),
+            listOf(mezzoGiornalieroDoppio, mezzaIma, polivalenza, area, disagio),
+            setOf(
+                mezzoGiornalieroDoppio.id,
+                mezzaIma.id,
+                polivalenza.id,
+                area.id,
+                disagio.id
+            )
+        )
+
+        assertEquals(4500, pay.basePayCents)
+        assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
+        assertFalse(pay.allowanceLines.any { it.name == "Polivalenza" })
+        assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
+        assertTrue(pay.allowanceLines.any { it.name == "Tubi" && it.amountCents == 775L })
+        assertEquals(6605, pay.totalPayCents)
     }
 
     private fun shift(type: PerformanceType, start: String, end: String): Shift = Shift(
