@@ -1,6 +1,7 @@
 package it.alantamanti.portshifttracker.data.repository
 
 import android.content.Context
+import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
@@ -115,6 +116,32 @@ class PortRepositoryTest {
         assertEquals(1, runBlocking { db.shiftDao().getAll().size })
     }
 
+
+    @Test
+    fun database_unique_index_blocks_direct_duplicate_insert() {
+        val date = LocalDate.of(2026, 9, 18)
+        val canonical = shift(date, PerformanceType.TURNO).copy(serviceEpochDay = date.toEpochDay())
+
+        runBlocking { db.shiftDao().insert(canonical) }
+
+        assertThrows(SQLiteConstraintException::class.java) {
+            runBlocking { db.shiftDao().insert(canonical) }
+        }
+    }
+
+    @Test
+    fun deleted_shift_can_be_restored_with_its_allowances() = runBlocking {
+        val date = LocalDate.of(2026, 9, 18)
+        val id = repository.addShiftWithSelections(shift(date, PerformanceType.TURNO), setOf(1))
+        val saved = db.shiftDao().getAll().single { it.id == id }
+
+        repository.deleteShift(saved)
+        assertEquals(0, db.shiftDao().getAll().size)
+
+        repository.restoreDeletedShift(saved, setOf(1))
+        assertEquals(1, db.shiftDao().getAll().size)
+        assertEquals(setOf(1L), db.shiftAllowanceSelectionDao().getAll().map { it.ruleId }.toSet())
+    }
 
     @Test
     fun range_query_returns_only_requested_period() = runBlocking {
