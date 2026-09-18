@@ -100,6 +100,7 @@ internal fun calendarShiftCode(row: ShiftWithPay): String = when (row.shift.perf
                     "SERA", "SERAS", "SERAF" -> "S"
                     "SERA2", "SERAS2", "SERAF2" -> "S2"
                     "NOTTE", "NOTTEF" -> "N"
+                    "G" -> "G"
                     else -> if (row.selectedRules.any { it.category == AllowanceCategory.MEZZO_TURNO }) "½T" else "T"
                 }
             }
@@ -118,6 +119,7 @@ internal fun calendarDisplayCode(row: ShiftWithPay): String {
     }
     val turnKey = turnRule?.let { "${it.code} ${it.name}".uppercase() }.orEmpty()
     val shiftCode = when {
+        "DOP_G" in turnKey || "GIORNALIERO" in turnKey -> "½G"
         "SERA2" in turnKey || "SERA 2" in turnKey || "S2" in turnKey -> "S2"
         "POM" in turnKey -> "P"
         "NOTTE" in turnKey -> "N"
@@ -139,6 +141,8 @@ internal fun calendarDisplayLabel(row: ShiftWithPay): String = when (val code = 
     "S" -> "Turno Sera"
     "S2" -> "Turno Sera 2"
     "N" -> "Turno Notte"
+    "G" -> "Giornaliero"
+    "½G" -> "Mezzo Giornaliero"
     "Ff" -> "Ferie"
     "Mm" -> "Malattia"
     "Ds" -> "Donazione sangue"
