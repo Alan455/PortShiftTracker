@@ -125,13 +125,15 @@ class AllowanceCalculatorTest {
         val pay = calculator.calculate(
             worker,
             shift(PerformanceType.TURNO, "2026-09-17T18:00:00", "2026-09-17T21:00:00"),
-            listOf(sera2, tuMezzo),
+            listOf(sera2, tuMezzo, mezzaIma),
+            // Mezza IMA non viene selezionata esplicitamente: deve aggiungerla il motore.
             setOf(7, 8)
         )
 
         assertEquals(3390, pay.basePayCents)
         assertTrue(pay.allowanceLines.any { it.name == "Sera2" && it.amountCents == 663L })
-        assertEquals(4053, pay.totalPayCents)
+        assertTrue(pay.allowanceLines.any { it.name == "Mezza IMA" && it.amountCents == 2615L })
+        assertEquals(6668, pay.totalPayCents)
     }
 
     @Test
