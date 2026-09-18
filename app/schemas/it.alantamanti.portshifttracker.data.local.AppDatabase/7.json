@@ -1,0 +1,404 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "cfd914234feb96e2f99ff0329aae3103",
+    "entities": [
+      {
+        "tableName": "workers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `hourlyRateCents` INTEGER NOT NULL, `basePayMode` TEXT NOT NULL, `baseShiftCents` INTEGER NOT NULL, `doubleBaseCents` INTEGER NOT NULL, `irpefBasisPoints` INTEGER NOT NULL, `senioritySteps` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hourlyRateCents",
+            "columnName": "hourlyRateCents",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "basePayMode",
+            "columnName": "basePayMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseShiftCents",
+            "columnName": "baseShiftCents",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "doubleBaseCents",
+            "columnName": "doubleBaseCents",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "irpefBasisPoints",
+            "columnName": "irpefBasisPoints",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senioritySteps",
+            "columnName": "senioritySteps",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "shifts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workerId` INTEGER NOT NULL, `startEpochMillis` INTEGER NOT NULL, `endEpochMillis` INTEGER NOT NULL, `zoneId` TEXT NOT NULL, `role` TEXT NOT NULL, `notes` TEXT NOT NULL, `serviceEpochDay` INTEGER, `performanceType` TEXT NOT NULL, FOREIGN KEY(`workerId`) REFERENCES `workers`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startEpochMillis",
+            "columnName": "startEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endEpochMillis",
+            "columnName": "endEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zoneId",
+            "columnName": "zoneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serviceEpochDay",
+            "columnName": "serviceEpochDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "performanceType",
+            "columnName": "performanceType",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_shifts_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shifts_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          },
+          {
+            "name": "index_shifts_startEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "startEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shifts_startEpochMillis` ON `${TABLE_NAME}` (`startEpochMillis`)"
+          },
+          {
+            "name": "index_shifts_workerId_serviceEpochDay_performanceType",
+            "unique": true,
+            "columnNames": [
+              "workerId",
+              "serviceEpochDay",
+              "performanceType"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_shifts_workerId_serviceEpochDay_performanceType` ON `${TABLE_NAME}` (`workerId`, `serviceEpochDay`, `performanceType`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "workers",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "workerId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "allowance_rules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `code` TEXT NOT NULL, `calculationType` TEXT NOT NULL, `value` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `weekdayMask` INTEGER NOT NULL, `windowStartMinute` INTEGER, `windowEndMinute` INTEGER, `minimumShiftMinutes` INTEGER NOT NULL, `roleFilter` TEXT, `priority` INTEGER NOT NULL, `effectiveFromEpochDay` INTEGER, `effectiveToEpochDay` INTEGER, `category` TEXT NOT NULL, `applicationMode` TEXT NOT NULL, `exclusiveGroup` TEXT, `basePayEffect` TEXT NOT NULL, `autoTrigger` TEXT NOT NULL, `turnAllowanceMultiplierBasisPoints` INTEGER NOT NULL, `tagsCsv` TEXT, `recommendedWithAnyTagCsv` TEXT, `performanceMask` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "code",
+            "columnName": "code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "calculationType",
+            "columnName": "calculationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weekdayMask",
+            "columnName": "weekdayMask",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "windowStartMinute",
+            "columnName": "windowStartMinute",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowEndMinute",
+            "columnName": "windowEndMinute",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "minimumShiftMinutes",
+            "columnName": "minimumShiftMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roleFilter",
+            "columnName": "roleFilter",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "priority",
+            "columnName": "priority",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "effectiveFromEpochDay",
+            "columnName": "effectiveFromEpochDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "effectiveToEpochDay",
+            "columnName": "effectiveToEpochDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "applicationMode",
+            "columnName": "applicationMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exclusiveGroup",
+            "columnName": "exclusiveGroup",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "basePayEffect",
+            "columnName": "basePayEffect",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoTrigger",
+            "columnName": "autoTrigger",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "turnAllowanceMultiplierBasisPoints",
+            "columnName": "turnAllowanceMultiplierBasisPoints",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tagsCsv",
+            "columnName": "tagsCsv",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "recommendedWithAnyTagCsv",
+            "columnName": "recommendedWithAnyTagCsv",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "performanceMask",
+            "columnName": "performanceMask",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_allowance_rules_code",
+            "unique": true,
+            "columnNames": [
+              "code"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_allowance_rules_code` ON `${TABLE_NAME}` (`code`)"
+          }
+        ]
+      },
+      {
+        "tableName": "shift_allowance_selections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`shiftId` INTEGER NOT NULL, `ruleId` INTEGER NOT NULL, PRIMARY KEY(`shiftId`, `ruleId`), FOREIGN KEY(`shiftId`) REFERENCES `shifts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`ruleId`) REFERENCES `allowance_rules`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "shiftId",
+            "columnName": "shiftId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleId",
+            "columnName": "ruleId",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "shiftId",
+            "ruleId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_shift_allowance_selections_shiftId",
+            "unique": false,
+            "columnNames": [
+              "shiftId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shift_allowance_selections_shiftId` ON `${TABLE_NAME}` (`shiftId`)"
+          },
+          {
+            "name": "index_shift_allowance_selections_ruleId",
+            "unique": false,
+            "columnNames": [
+              "ruleId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shift_allowance_selections_ruleId` ON `${TABLE_NAME}` (`ruleId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "shifts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "shiftId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "allowance_rules",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "ruleId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cfd914234feb96e2f99ff0329aae3103')"
+    ]
+  }
+}
