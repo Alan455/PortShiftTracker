@@ -36,8 +36,7 @@ internal fun quickShiftKindsFor(performanceType: PerformanceType): List<QuickShi
     PerformanceType.DOPPIO -> listOf(
         QuickShiftKind.POMERIGGIO,
         QuickShiftKind.SERA,
-        QuickShiftKind.SERA2,
-        QuickShiftKind.GIORNALIERO
+        QuickShiftKind.SERA2
     )
     PerformanceType.MEZZO_DOPPIO -> emptyList()
 }
