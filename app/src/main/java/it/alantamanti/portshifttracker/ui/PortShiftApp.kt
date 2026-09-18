@@ -691,13 +691,20 @@ private fun ShiftEditorScreen(
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
     val featureStore = remember(context) { AppFeatureStore(context) }
     var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
-        mutableStateOf(inferQuickShiftKind(initialSelectedIds, rules))
+        mutableStateOf(
+            inferQuickShiftKind(
+                initialSelectedIds,
+                rules,
+                initialShift?.performanceType ?: PerformanceType.TURNO
+            )
+        )
     }
     val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
     val specialOverrideClass = featureStore.specialDay(editorDate)?.dayClass?.toPortDayClass()
-    // Il Turno ordinario usa sempre l'inserimento rapido; Doppio e Mezzo Doppio
-    // mantengono i dettagli di data/orario perché non fanno parte dei turni rapidi.
-    val effectiveQuickMode = performanceType == PerformanceType.TURNO
+    // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
+    // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
+    val effectiveQuickMode =
+        performanceType == PerformanceType.TURNO || performanceType == PerformanceType.DOPPIO
     val calculator = remember { AllowanceCalculator() }
 
     val manualRules = rules.filter {
@@ -873,10 +880,12 @@ private fun ShiftEditorScreen(
                                             )
                                             .clickable {
                                                 performanceType = type
-                                                selectedIds = selectedIds.filterTo(mutableSetOf()) { id ->
+                                                val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
                                                     rules.firstOrNull { it.id == id }
                                                         ?.let { (it.performanceMask and type.maskBit) != 0 } == true
                                                 }
+                                                selectedIds = compatibleIds
+                                                quickKind = inferQuickShiftKind(compatibleIds, rules, type)
                                             },
                                         shape = shape,
                                         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -917,10 +926,19 @@ private fun ShiftEditorScreen(
                                 date = editorDate,
                                 rules = rules,
                                 selectedKind = quickKind,
+                                performanceType = performanceType,
+                                doubleBaseCents = worker.doubleBaseCents,
                                 overrideClass = specialOverrideClass,
                                 onKindSelected = { kind ->
                                     quickKind = kind
-                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate, specialOverrideClass)
+                                    selectedIds = applyQuickTurnSelection(
+                                        currentIds = selectedIds,
+                                        rules = rules,
+                                        kind = kind,
+                                        date = editorDate,
+                                        overrideClass = specialOverrideClass,
+                                        performanceType = performanceType
+                                    )
                                 }
                             )
                         }
@@ -1132,7 +1150,12 @@ private fun ShiftEditorScreen(
                     }
 
                     categoriesForPerformance(performanceType)
-                        .filterNot { effectiveQuickMode && it == AllowanceCategory.TURNO }
+                        .filterNot { category ->
+                            effectiveQuickMode && (
+                                category == AllowanceCategory.TURNO ||
+                                    category == AllowanceCategory.DOPPIO
+                                )
+                        }
                         .forEach { category ->
                         val categoryRules = manualRules.filter { it.category == category }
                         if (categoryRules.isNotEmpty()) {
