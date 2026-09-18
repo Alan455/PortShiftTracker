@@ -192,5 +192,16 @@ class PortShiftApplication : Application() {
             }
         }
 
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE shifts ADD COLUMN serviceEpochDay INTEGER")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_shifts_workerId_serviceEpochDay_performanceType " +
+                        "ON shifts(workerId, serviceEpochDay, performanceType)"
+                )
+            }
+        }
+
     }
 }
