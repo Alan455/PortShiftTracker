@@ -95,11 +95,25 @@ import kotlin.math.roundToLong
 
 @Composable
 internal fun SummaryScreen(repository: PortRepository) {
-    val rows by repository.shiftRows.collectAsState(initial = emptyList())
     val rules by repository.rules.collectAsState(initial = emptyList())
     var month by remember { mutableStateOf(YearMonth.now()) }
+    val zone = remember { ZoneId.of("Europe/Rome") }
 
-    val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
+    val monthStart = remember(month) { month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+    val monthEnd = remember(month) { month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+    val monthRowsFlow = remember(monthStart, monthEnd) {
+        repository.shiftRowsBetween(monthStart, monthEnd)
+    }
+    val monthRows by monthRowsFlow.collectAsState(initial = emptyList())
+
+    val trendStart = remember(month) {
+        month.minusMonths(5).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+    val trendRowsFlow = remember(trendStart, monthEnd) {
+        repository.shiftRowsBetween(trendStart, monthEnd)
+    }
+    val trendRows by trendRowsFlow.collectAsState(initial = emptyList())
+
     val total = monthRows.sumOf { it.pay.totalPayCents }
     val baseTotal = monthRows.sumOf { it.pay.basePayCents }
     val allowanceTotal = monthRows.sumOf { it.pay.allowancesCents }
@@ -158,6 +172,8 @@ internal fun SummaryScreen(repository: PortRepository) {
                 MetricCard("Prestazioni", monthRows.size.toString(), Modifier.weight(1f))
             }
         }
+
+        item { StatisticsCard(month = month, monthRows = monthRows, trendRows = trendRows) }
 
         item { SectionHeader("Totali per tipo di prestazione") }
         item {
