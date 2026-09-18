@@ -80,6 +80,7 @@ object BackupCodec {
         .put("zoneId", v.zoneId)
         .put("role", v.role)
         .put("notes", v.notes)
+        .putNullable("serviceEpochDay", v.serviceEpochDay)
         .put("performanceType", v.performanceType.name)
 
     private fun shiftFromJson(o: JSONObject) = ShiftEntity(
@@ -90,6 +91,7 @@ object BackupCodec {
         zoneId = o.optString("zoneId", "Europe/Rome"),
         role = o.optString("role", ""),
         notes = o.optString("notes", ""),
+        serviceEpochDay = o.optNullableLong("serviceEpochDay"),
         performanceType = PerformanceType.valueOf(o.optString("performanceType", PerformanceType.TURNO.name))
     )
 
