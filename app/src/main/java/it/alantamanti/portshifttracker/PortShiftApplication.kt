@@ -22,7 +22,7 @@ class PortShiftApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val db = Room.databaseBuilder(this, AppDatabase::class.java, "port_shift.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
         repository = PortRepository(db)
 
@@ -56,6 +56,17 @@ class PortShiftApplication : Application() {
                 "turnAllowanceMultiplierBasisPoints = 5000 " +
                 "WHERE code IN ('DOP_TU_MEZZO','DOP_ON_MEZZO')"
         )
+
+        // Normalizza gradualmente i record legacy. In presenza di vecchi duplicati,
+        // il record conflittuale resta null per preservare lo storico.
+        db.shiftDao().getWithoutServiceDay().forEach { shift ->
+            val date = java.time.Instant.ofEpochMilli(shift.startEpochMillis)
+                .atZone(java.time.ZoneId.of(shift.zoneId))
+                .toLocalDate()
+            runCatching {
+                db.shiftDao().update(shift.copy(serviceEpochDay = date.toEpochDay()))
+            }
+        }
     }
 
     companion object {
