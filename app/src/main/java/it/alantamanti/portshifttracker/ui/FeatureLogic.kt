@@ -52,19 +52,24 @@ internal fun consistencyWarnings(
     }
 }
 
+private val primaryAbsenceCodes = setOf(
+    "ALT_FERIE",
+    "ALT_MALATTIA",
+    "ALT_IMA",
+    "AVV_DS",
+    "AVV_INAIL",
+    "AVV_CONGEDO"
+)
+
 internal fun displayShiftLabel(row: ShiftWithPay): String {
-    val absence = row.selectedRules.firstOrNull {
-        it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" || it.code == "ALT_IMA"
-    }
+    val absence = row.selectedRules.firstOrNull { it.code in primaryAbsenceCodes }
     if (absence != null) return absence.name
 
     return mainAllowanceName(row) ?: performanceLabel(row.shift.performanceType)
 }
 
 internal fun displayShiftExtras(row: ShiftWithPay): List<String> {
-    val absence = row.selectedRules.firstOrNull {
-        it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" || it.code == "ALT_IMA"
-    }
+    val absence = row.selectedRules.firstOrNull { it.code in primaryAbsenceCodes }
     if (absence != null) return emptyList()
 
     val mainName = mainAllowanceName(row)
@@ -78,14 +83,26 @@ internal fun calendarShiftCode(row: ShiftWithPay): String = when (row.shift.perf
     PerformanceType.DOPPIO -> "2×"
     PerformanceType.MEZZO_DOPPIO -> "½×"
     PerformanceType.TURNO -> {
-        val code = row.selectedRules.firstOrNull { it.category == AllowanceCategory.TURNO }?.code
-        when (code) {
-            "MAT", "MATF" -> "M"
-            "POM", "POMS", "POMF" -> "P"
-            "SERA", "SERAS", "SERAF" -> "S"
-            "SERA2", "SERAS2", "SERAF2" -> "S2"
-            "NOTTE", "NOTTEF" -> "N"
-            else -> if (row.selectedRules.any { it.category == AllowanceCategory.MEZZO_TURNO }) "½T" else "T"
+        val selectedCodes = row.selectedRules.map { it.code }.toSet()
+        when {
+            "ALT_FERIE" in selectedCodes -> "Ff"
+            "ALT_MALATTIA" in selectedCodes -> "Mm"
+            "AVV_DS" in selectedCodes -> "Ds"
+            "AVV_CONGEDO" in selectedCodes -> "PC"
+            "AVV_INAIL" in selectedCodes -> "II"
+            else -> {
+                val code = row.selectedRules
+                    .firstOrNull { it.category == AllowanceCategory.TURNO }
+                    ?.code
+                when (code) {
+                    "MAT", "MATF" -> "M"
+                    "POM", "POMS", "POMF" -> "P"
+                    "SERA", "SERAS", "SERAF" -> "S"
+                    "SERA2", "SERAS2", "SERAF2" -> "S2"
+                    "NOTTE", "NOTTEF" -> "N"
+                    else -> if (row.selectedRules.any { it.category == AllowanceCategory.MEZZO_TURNO }) "½T" else "T"
+                }
+            }
         }
     }
 }
