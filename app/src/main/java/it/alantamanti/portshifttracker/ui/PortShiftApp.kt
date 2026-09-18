@@ -306,7 +306,7 @@ internal fun CalendarDay(
 ) {
     val today = date == LocalDate.now()
     val shape = RoundedCornerShape(10.dp)
-    val visibleRows = dayRows.take(2)
+    val visibleRows = dayRows.sortedBy { it.shift.startEpochMillis }.take(2)
 
     Surface(
         modifier = Modifier
