@@ -225,14 +225,35 @@ internal fun HomeScreen(repository: PortRepository) {
             if (dayRows.isEmpty()) {
                 item { EmptyDayCard() }
             } else {
-                item {
-                    DayDetailsCard(
-                        rows = dayRows,
-                        onDetails = { row -> detailRow = row },
-                        onEdit = { row ->
+                items(dayRows, key = { it.shift.id }) { row ->
+                    ShiftCompactCard(
+                        row = row,
+                        onDetails = { detailRow = row },
+                        onEdit = {
                             runWithMonthConfirmation(rowDate(row)) { editingRow = row }
                         }
                     )
+                }
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 16.dp, vertical = 13.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Totale giornata", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                money(dayRows.sumOf { it.pay.totalPayCents }),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
         }
