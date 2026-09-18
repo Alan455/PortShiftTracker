@@ -333,7 +333,7 @@ internal fun HomeScreen(repository: PortRepository) {
             initialDate = rowDate(row),
             initialShift = row.shift,
             initialSelectedIds = row.selectedRules.map { it.id }.toSet(),
-            historyRows = rows,
+            historyRows = historyRows,
             specialDays = specialDays,
             onDismiss = { editingRow = null },
             onSave = { shifts, selectedIds ->
