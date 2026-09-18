@@ -140,6 +140,7 @@ internal val visibleCategories = listOf(
 private enum class MainTab(val label: String, val glyph: String) {
     HOME("Home", "⌂"),
     SUMMARY("Riepilogo", "▤"),
+    HISTORY("Storico", "⌕"),
     RULES("Indennità", "€"),
     SETTINGS("Impostazioni", "⚙")
 }
@@ -204,6 +205,7 @@ fun PortShiftApp(repository: PortRepository) {
                 when (selectedTab) {
                     MainTab.HOME -> HomeScreen(repository)
                     MainTab.SUMMARY -> SummaryScreen(repository)
+                    MainTab.HISTORY -> HistoryScreen(repository)
                     MainTab.RULES -> RulesScreen(repository)
                     MainTab.SETTINGS -> SettingsScreen(repository)
                 }
