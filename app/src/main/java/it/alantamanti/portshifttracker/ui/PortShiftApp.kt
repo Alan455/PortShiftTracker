@@ -431,6 +431,7 @@ internal fun ShiftDetailDialog(
     row: ShiftWithPay,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onCopy: () -> Unit,
     onDelete: () -> Unit
 ) {
     AlertDialog(
@@ -463,7 +464,12 @@ internal fun ShiftDetailDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onEdit) { Text("Modifica") } },
+        confirmButton = {
+            Row {
+                TextButton(onClick = onCopy) { Text("Copia") }
+                TextButton(onClick = onEdit) { Text("Modifica") }
+            }
+        },
         dismissButton = {
             Row {
                 TextButton(onClick = onDelete) { Text("Elimina", color = MaterialTheme.colorScheme.error) }
