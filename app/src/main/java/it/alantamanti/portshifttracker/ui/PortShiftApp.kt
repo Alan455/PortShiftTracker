@@ -93,24 +93,24 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToLong
 
-private val editFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALIAN)
-private val dayTitleFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ITALIAN)
-private val shortDayFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ITALIAN)
+internal val editFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+internal val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+internal val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALIAN)
+internal val dayTitleFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ITALIAN)
+internal val shortDayFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ITALIAN)
 
-private val PortBlue = Color(0xFF0B5FBE)
-private val PortBlueDark = Color(0xFF12477E)
-private val PortSurface = Color(0xFFF6F8FC)
-private val PortPurple = Color(0xFF7357D9)
-private val PortOrange = Color(0xFFE17932)
-private val PortGreen = Color(0xFF159A80)
+internal val PortBlue = Color(0xFF0B5FBE)
+internal val PortBlueDark = Color(0xFF12477E)
+internal val PortSurface = Color(0xFFF6F8FC)
+internal val PortPurple = Color(0xFF7357D9)
+internal val PortOrange = Color(0xFFE17932)
+internal val PortGreen = Color(0xFF159A80)
 
 // Voci ritirate: restano nel DB per non alterare eventuali storico/backup,
 // ma non sono più selezionabili né mostrate nell'editor delle indennità.
-private val retiredRuleCodes = setOf("ALT_BUON_PASTO", "ALT_CRAL", "ALT_MOD_DOPPIO")
+internal val retiredRuleCodes = setOf("ALT_BUON_PASTO", "ALT_CRAL", "ALT_MOD_DOPPIO")
 
-private val portColorScheme = lightColorScheme(
+internal val portColorScheme = lightColorScheme(
     primary = PortBlue,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDCEAFF),
@@ -126,7 +126,7 @@ private val portColorScheme = lightColorScheme(
     error = Color(0xFFBA1A1A)
 )
 
-private val visibleCategories = listOf(
+internal val visibleCategories = listOf(
     AllowanceCategory.TURNO,
     AllowanceCategory.MEZZO_TURNO,
     AllowanceCategory.AVVIAMENTO,
@@ -144,7 +144,7 @@ private enum class MainTab(val label: String, val glyph: String) {
     SETTINGS("Impostazioni", "⚙")
 }
 
-private enum class RuleFilter(val label: String) {
+internal enum class RuleFilter(val label: String) {
     TURNI("Turni"),
     DOPPI("Doppi"),
     GENERALI("Generali")
@@ -213,189 +213,7 @@ fun PortShiftApp(repository: PortRepository) {
 }
 
 @Composable
-private fun HomeScreen(repository: PortRepository) {
-    val rows by repository.shiftRows.collectAsState(initial = emptyList())
-    val workers by repository.workers.collectAsState(initial = emptyList())
-    val rules by repository.rules.collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val featureStore = remember(context) { AppFeatureStore(context) }
-    val specialDays by featureStore.specialDaysFlow.collectAsState(initial = emptyList())
-
-    var month by remember { mutableStateOf(YearMonth.now()) }
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var editorDate by remember { mutableStateOf<LocalDate?>(null) }
-    var editingRow by remember { mutableStateOf<ShiftWithPay?>(null) }
-    var detailRow by remember { mutableStateOf<ShiftWithPay?>(null) }
-
-    val rowsByDate = remember(rows) { rows.groupBy(::rowDate) }
-    val dayRows = rowsByDate[selectedDate].orEmpty().sortedBy { it.shift.startEpochMillis }
-    val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
-    val monthTotal = monthRows.sumOf { it.pay.totalPayCents }
-
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 16.dp,
-                top = 12.dp,
-                end = 16.dp,
-                bottom = 92.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            item {
-                MonthCalendarCard(
-                    month = month,
-                    selectedDate = selectedDate,
-                    rowsByDate = rowsByDate,
-                    onPrevious = {
-                        month = month.minusMonths(1)
-                        selectedDate = clampDateToMonth(selectedDate, month)
-                    },
-                    onNext = {
-                        month = month.plusMonths(1)
-                        selectedDate = clampDateToMonth(selectedDate, month)
-                    },
-                    onDateSelected = { selectedDate = it }
-                )
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MetricCard(
-                        title = "Totale mese",
-                        value = money(monthTotal),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Prestazioni",
-                        value = monthRows.size.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item {
-                SectionHeader(
-                    title = italianTitle(selectedDate.format(dayTitleFormatter)),
-                    trailing = if (dayRows.isEmpty()) "Nessuna prestazione" else "${dayRows.size} prestaz."
-                )
-            }
-
-            if (dayRows.isEmpty()) {
-                item { EmptyDayCard() }
-            } else {
-                items(dayRows, key = { it.shift.id }) { row ->
-                    ShiftCompactCard(
-                        row = row,
-                        onDetails = { detailRow = row },
-                        onEdit = { editingRow = row }
-                    )
-                }
-                item {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 16.dp, vertical = 13.dp).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Totale giornata", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                money(dayRows.sumOf { it.pay.totalPayCents }),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-            tonalElevation = 3.dp
-        ) {
-            Button(
-                onClick = { editorDate = selectedDate },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                enabled = workers.isNotEmpty(),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text("＋  Aggiungi prestazione", fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-
-    val worker = workers.firstOrNull()
-    if (editorDate != null && worker != null) {
-        ShiftEditorScreen(
-            worker = worker,
-            rules = rules,
-            initialDate = editorDate!!,
-            initialShift = null,
-            initialSelectedIds = emptySet(),
-            historyRows = rows,
-            specialDays = specialDays,
-            onDismiss = { editorDate = null },
-            onSave = { shifts, selectedIds ->
-                runCatching {
-                    repository.addShiftsWithSelections(shifts, selectedIds)
-                    Unit
-                }
-            }
-        )
-    }
-
-    editingRow?.let { row ->
-        ShiftEditorScreen(
-            worker = row.worker,
-            rules = rules,
-            initialDate = rowDate(row),
-            initialShift = row.shift,
-            initialSelectedIds = row.selectedRules.map { it.id }.toSet(),
-            historyRows = rows,
-            specialDays = specialDays,
-            onDismiss = { editingRow = null },
-            onSave = { shifts, selectedIds ->
-                runCatching {
-                    shifts.firstOrNull()?.let { shift ->
-                        repository.updateShiftWithSelections(shift, selectedIds)
-                    }
-                    Unit
-                }
-            }
-        )
-    }
-
-    detailRow?.let { row ->
-        ShiftDetailDialog(
-            row = row,
-            onDismiss = { detailRow = null },
-            onEdit = {
-                detailRow = null
-                editingRow = row
-            },
-            onDelete = {
-                scope.launch { repository.deleteShift(row.shift) }
-                detailRow = null
-            }
-        )
-    }
-}
-
-@Composable
-private fun MonthCalendarCard(
+internal fun MonthCalendarCard(
     month: YearMonth,
     selectedDate: LocalDate,
     rowsByDate: Map<LocalDate, List<ShiftWithPay>>,
@@ -478,7 +296,7 @@ private fun MonthCalendarCard(
 }
 
 @Composable
-private fun CalendarDay(
+internal fun CalendarDay(
     date: LocalDate,
     selected: Boolean,
     dayRows: List<ShiftWithPay>,
@@ -516,7 +334,7 @@ private fun CalendarDay(
 }
 
 @Composable
-private fun EmptyDayCard() {
+internal fun EmptyDayCard() {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(18.dp)
@@ -538,7 +356,7 @@ private fun EmptyDayCard() {
 }
 
 @Composable
-private fun ShiftCompactCard(
+internal fun ShiftCompactCard(
     row: ShiftWithPay,
     onDetails: () -> Unit,
     onEdit: () -> Unit
@@ -609,7 +427,7 @@ private fun ShiftCompactCard(
 }
 
 @Composable
-private fun ShiftDetailDialog(
+internal fun ShiftDetailDialog(
     row: ShiftWithPay,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -656,7 +474,7 @@ private fun ShiftDetailDialog(
 }
 
 @Composable
-private fun BreakdownLine(label: String, cents: Long, bold: Boolean = false, primary: Boolean = false) {
+internal fun BreakdownLine(label: String, cents: Long, bold: Boolean = false, primary: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal)
         Text(
@@ -667,682 +485,8 @@ private fun BreakdownLine(label: String, cents: Long, bold: Boolean = false, pri
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ShiftEditorScreen(
-    worker: WorkerEntity,
-    rules: List<AllowanceRuleEntity>,
-    initialDate: LocalDate,
-    initialShift: ShiftEntity?,
-    initialSelectedIds: Set<Long>,
-    historyRows: List<ShiftWithPay>,
-    specialDays: List<SpecialDayOverride>,
-    onDismiss: () -> Unit,
-    onSave: suspend (List<ShiftEntity>, Set<Long>) -> Result<Unit>
-) {
-    val context = LocalContext.current
-    val initialZone = ZoneId.of(initialShift?.zoneId ?: "Europe/Rome")
-    val initialStart = initialShift?.let {
-        LocalDateTime.ofInstant(Instant.ofEpochMilli(it.startEpochMillis), initialZone)
-    } ?: initialDate.atTime(8, 0)
-    val initialEnd = initialShift?.let {
-        LocalDateTime.ofInstant(Instant.ofEpochMilli(it.endEpochMillis), initialZone)
-    } ?: initialStart.plusHours(6)
-
-    var startText by remember(initialShift?.id, initialDate) { mutableStateOf(initialStart.format(editFormatter)) }
-    var endText by remember(initialShift?.id, initialDate) { mutableStateOf(initialEnd.format(editFormatter)) }
-    var role by remember(initialShift?.id) { mutableStateOf(initialShift?.role ?: "Operatore") }
-    var notes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes.orEmpty()) }
-    var performanceType by remember(initialShift?.id) { mutableStateOf(initialShift?.performanceType ?: PerformanceType.TURNO) }
-    var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
-    var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var saving by remember { mutableStateOf(false) }
-    var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
-    var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
-        mutableStateOf(
-            inferQuickShiftKind(
-                initialSelectedIds,
-                rules,
-                initialShift?.performanceType ?: PerformanceType.TURNO
-            )
-        )
-    }
-    val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
-    val specialOverrideClass = specialDays.firstOrNull { it.epochDay == editorDate.toEpochDay() }
-        ?.dayClass?.toPortDayClass()
-    // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
-    // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
-    val effectiveQuickMode =
-        performanceType == PerformanceType.TURNO || performanceType == PerformanceType.DOPPIO
-    val calculator = remember { AllowanceCalculator() }
-
-    val manualRules = rules.filter {
-        it.enabled &&
-            it.code !in retiredRuleCodes &&
-            it.applicationMode == AllowanceApplicationMode.MANUAL &&
-            (it.performanceMask and performanceType.maskBit) != 0
-    }
-    val normalizedSelectedIds = normalizeSelectedRuleIds(performanceType, selectedIds, rules)
-    LaunchedEffect(normalizedSelectedIds) {
-        if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
-    }
-    val selectedRules = manualRules.filter { it.id in normalizedSelectedIds }
-    val saveValidationMessage = selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
-    val usageScores = remember(historyRows, role, performanceType, editorDate) {
-        ruleUsageScores(historyRows, editorDate, performanceType, role)
-    }
-    val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
-    val absenceRule = selectedRules.firstOrNull { it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" }
-    val rangeEnabled = initialShift == null && absenceRule != null
-    val effectiveRangeEnd = if (rangeEndDate.isBefore(editorDate)) editorDate else rangeEndDate
-    val selectedTags = selectedRules.flatMap { parseTags(it.tagsCsv) }.toSet()
-    val relationWarnings = selectedRules.mapNotNull { rule ->
-        val recommendedTags = parseTags(rule.recommendedWithAnyTagCsv)
-        if (recommendedTags.isNotEmpty() && recommendedTags.none { it in selectedTags }) {
-            when (rule.code) {
-                "ALT_MEZZA_IMA" -> "Mezza IMA normalmente va insieme a TUMezzo o ONmezzo."
-                else -> "${rule.name}: è normalmente associata a ${recommendedTags.joinToString()}."
-            }
-        } else null
-    }
-    val suggestedCompanions = manualRules.filter { rule ->
-        rule.id !in normalizedSelectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
-    }
-    val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in normalizedSelectedIds })
-
-    val draftShift = remember(startText, endText, role, notes, performanceType, initialShift?.id) {
-        parseShiftOrNull(
-            id = initialShift?.id ?: 0,
-            workerId = worker.id,
-            startText = startText,
-            endText = endText,
-            role = role,
-            notes = notes,
-            performanceType = performanceType
-        )
-    }
-    val preview = runCatching {
-        draftShift?.let {
-            calculator.calculate(worker.toDomain(), it.toDomain(), rules.map { rule -> rule.toDomain() }, normalizedSelectedIds)
-        }
-    }.getOrNull()
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = PortBlueDark,
-                            titleContentColor = Color.White,
-                            navigationIconContentColor = Color.White
-                        ),
-                        navigationIcon = {
-                            TextButton(
-                                onClick = onDismiss,
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-                            ) {
-                                Text("‹", style = MaterialTheme.typography.headlineSmall)
-                            }
-                        },
-                        title = {
-                            Column {
-                                Text(if (initialShift == null) "Nuova prestazione" else "Modifica prestazione")
-                                Text(
-                                    italianTitle(editorDate.format(shortDayFormatter)),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.82f)
-                                )
-                            }
-                        }
-                    )
-                },
-                bottomBar = {
-                    Surface(color = Color.White, tonalElevation = 8.dp) {
-                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        selectedSummary,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    preview?.let {
-                                        Text(
-                                            "Base ${money(it.basePayCents)}  •  Indennità ${money(it.allowancesCents)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            payFormula(it),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Text(
-                                    preview?.let { money(it.totalPayCents) } ?: "—",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Button(
-                                onClick = {
-                                    val shift = parseShiftOrNull(
-                                        id = initialShift?.id ?: 0,
-                                        workerId = worker.id,
-                                        startText = startText,
-                                        endText = endText,
-                                        role = role,
-                                        notes = notes,
-                                        performanceType = performanceType
-                                    )
-                                    when {
-                                        shift == null -> {
-                                            error = "Controlla data e orari: la fine deve essere successiva all'inizio."
-                                        }
-                                        saveValidationMessage != null -> {
-                                            error = saveValidationMessage
-                                        }
-                                        else -> {
-                                            error = null
-                                            val shiftsToSave = if (rangeEnabled) {
-                                                expandShiftRange(shift, effectiveRangeEnd)
-                                            } else {
-                                                listOf(shift)
-                                            }
-                                            saving = true
-                                            scope.launch {
-                                                val result = onSave(shiftsToSave, normalizedSelectedIds)
-                                                saving = false
-                                                result.onSuccess { onDismiss() }
-                                                    .onFailure { failure ->
-                                                        error = when (failure) {
-                                                            is DuplicatePerformanceException ->
-                                                                "Esiste già una ${performanceLabel(failure.performanceType)} il ${italianTitle(failure.date.format(shortDayFormatter))}."
-                                                            else -> failure.message ?: "Errore durante il salvataggio."
-                                                        }
-                                                    }
-                                            }
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !saving && saveValidationMessage == null,
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Text(
-                                    when {
-                                        saving -> "Salvataggio…"
-                                        initialShift != null -> "Salva modifiche"
-                                        rangeEnabled -> "Salva periodo ${absenceRule.name}"
-                                        else -> "Salva prestazione"
-                                    },
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
-            ) { padding ->
-                LazyColumn(
-                    Modifier.padding(padding).fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = 16.dp,
-                        top = 12.dp,
-                        end = 16.dp,
-                        bottom = 132.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item {
-                        EditorSectionCard(title = "1. Tipo di prestazione") {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                PerformanceType.entries.forEach { type ->
-                                    val selected = performanceType == type
-                                    val shape = RoundedCornerShape(14.dp)
-                                    Surface(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = 74.dp)
-                                            .border(
-                                                width = if (selected) 2.dp else 1.dp,
-                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                                shape = shape
-                                            )
-                                            .clickable {
-                                                performanceType = type
-                                                val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
-                                                    rules.firstOrNull { it.id == id }
-                                                        ?.let { (it.performanceMask and type.maskBit) != 0 } == true
-                                                }
-                                                selectedIds = normalizeSelectedRuleIds(type, compatibleIds, rules)
-                                                quickKind = inferQuickShiftKind(selectedIds, rules, type)
-                                            },
-                                        shape = shape,
-                                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                                    ) {
-                                        Column(
-                                            Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                                        ) {
-                                            Text(
-                                                when (type) {
-                                                    PerformanceType.TURNO -> "T"
-                                                    PerformanceType.DOPPIO -> "2×"
-                                                    PerformanceType.MEZZO_DOPPIO -> "½×"
-                                                },
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                performanceLabel(type),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            InfoPanel(performanceInfo(worker, performanceType))
-                        }
-                    }
-
-                    if (effectiveQuickMode) {
-                        item {
-                            QuickShiftPanel(
-                                date = editorDate,
-                                rules = rules,
-                                selectedKind = quickKind,
-                                performanceType = performanceType,
-                                doubleBaseCents = worker.doubleBaseCents,
-                                overrideClass = specialOverrideClass,
-                                onKindSelected = { kind ->
-                                    quickKind = kind
-                                    selectedIds = normalizeSelectedRuleIds(
-                                        performanceType,
-                                        applyQuickTurnSelection(
-                                            currentIds = selectedIds,
-                                            rules = rules,
-                                            kind = kind,
-                                            date = editorDate,
-                                            overrideClass = specialOverrideClass,
-                                            performanceType = performanceType
-                                        ),
-                                        rules
-                                    )
-                                }
-                            )
-                        }
-                    }
-
-                    preview?.let { pay ->
-                        item {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                            ) {
-                                Row(
-                                    Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text("Totale provvisorio", style = MaterialTheme.typography.labelMedium)
-                                        Text(
-                                            selectedSummary,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            payFormula(pay),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Text(
-                                        money(pay.totalPayCents),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (!effectiveQuickMode) {
-                        item {
-                            val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
-                            val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
-
-                        EditorSectionCard(title = "2. Data e orario") {
-                            PickerField(
-                                label = "Data",
-                                value = italianTitle(currentStart.toLocalDate().format(shortDayFormatter)),
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    val duration = java.time.Duration.between(currentStart, currentEnd)
-                                        .takeIf { !it.isNegative && !it.isZero }
-                                        ?: java.time.Duration.ofHours(6)
-                                    DatePickerDialog(
-                                        context,
-                                        { _, year, month, day ->
-                                            val newStart = LocalDateTime.of(
-                                                LocalDate.of(year, month + 1, day),
-                                                currentStart.toLocalTime()
-                                            )
-                                            startText = newStart.format(editFormatter)
-                                            endText = newStart.plus(duration).format(editFormatter)
-                                            if (performanceType == PerformanceType.TURNO) {
-                                                quickKind?.let { kind ->
-                                                    val newDate = newStart.toLocalDate()
-                                                    val override = specialDays.firstOrNull { it.epochDay == newDate.toEpochDay() }
-                                                        ?.dayClass?.toPortDayClass()
-                                                    selectedIds = applyQuickTurnSelection(
-                                                        selectedIds,
-                                                        rules,
-                                                        kind,
-                                                        newDate,
-                                                        override
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        currentStart.year,
-                                        currentStart.monthValue - 1,
-                                        currentStart.dayOfMonth
-                                    ).show()
-                                }
-                            )
-
-                            Spacer(Modifier.height(8.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PickerField(
-                                    label = "Ora inizio",
-                                    value = currentStart.format(timeFormatter),
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        val duration = java.time.Duration.between(currentStart, currentEnd)
-                                            .takeIf { !it.isNegative && !it.isZero }
-                                            ?: java.time.Duration.ofHours(6)
-                                        TimePickerDialog(
-                                            context,
-                                            { _, hour, minute ->
-                                                val newStart = LocalDateTime.of(
-                                                    currentStart.toLocalDate(),
-                                                    LocalTime.of(hour, minute)
-                                                )
-                                                startText = newStart.format(editFormatter)
-                                                endText = newStart.plus(duration).format(editFormatter)
-                                            },
-                                            currentStart.hour,
-                                            currentStart.minute,
-                                            true
-                                        ).show()
-                                    }
-                                )
-                                PickerField(
-                                    label = "Ora fine",
-                                    value = currentEnd.format(timeFormatter) + if (currentEnd.toLocalDate().isAfter(currentStart.toLocalDate())) " +1g" else "",
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        TimePickerDialog(
-                                            context,
-                                            { _, hour, minute ->
-                                                var candidate = LocalDateTime.of(
-                                                    currentStart.toLocalDate(),
-                                                    LocalTime.of(hour, minute)
-                                                )
-                                                if (!candidate.isAfter(currentStart)) candidate = candidate.plusDays(1)
-                                                endText = candidate.format(editFormatter)
-                                            },
-                                            currentEnd.hour,
-                                            currentEnd.minute,
-                                            true
-                                        ).show()
-                                    }
-                                )
-                            }
-
-                            Spacer(Modifier.height(10.dp))
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Durata rapida", style = MaterialTheme.typography.labelMedium)
-                                Text(
-                                    java.time.Duration.between(currentStart, currentEnd)
-                                        .takeIf { !it.isNegative }
-                                        ?.let { d -> "${d.toHours()}h ${d.toMinutesPart()}m" }
-                                        ?: "—",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf(4L, 6L, 8L).forEach { hours ->
-                                    OutlinedButton(
-                                        onClick = { endText = currentStart.plusHours(hours).format(editFormatter) },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("$hours h")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    }
-
-                    item {
-                        EditorSectionCard(title = "Mansione e note") {
-                            OutlinedTextField(
-                                value = role,
-                                onValueChange = { role = it },
-                                label = { Text("Mansione") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            if (!showNotes) {
-                                TextButton(onClick = { showNotes = true }) { Text("＋ Aggiungi note") }
-                            } else {
-                                OutlinedTextField(
-                                    value = notes,
-                                    onValueChange = { notes = it },
-                                    label = { Text("Note") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    minLines = 2
-                                )
-                                TextButton(
-                                    onClick = {
-                                        notes = ""
-                                        showNotes = false
-                                    }
-                                ) { Text("Rimuovi note") }
-                            }
-                        }
-                    }
-
-                    item {
-                        PresetQuickBar(
-                            rules = rules,
-                            selectedIds = selectedIds,
-                            role = role,
-                            performanceType = performanceType,
-                            onApply = { presetRole, ids ->
-                                role = presetRole
-                                selectedIds = normalizeSelectedRuleIds(performanceType, ids, rules)
-                            }
-                        )
-                    }
-
-                    item {
-                        SectionHeader(
-                            title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
-                            trailing = selectedSummary
-                        )
-                    }
-
-                    categoriesForPerformance(performanceType)
-                        .filterNot { category ->
-                            effectiveQuickMode && (
-                                category == AllowanceCategory.TURNO ||
-                                    category == AllowanceCategory.DOPPIO
-                                )
-                        }
-                        .forEach { category ->
-                        val categoryRules = manualRules.filter { it.category == category }
-                        if (categoryRules.isNotEmpty()) {
-                            item {
-                                AllowanceCategoryCard(
-                                    category = category,
-                                    rules = categoryRules,
-                                    selectedIds = selectedIds,
-                                    performanceType = performanceType,
-                                    usageCounts = usageScores,
-                                    onToggle = { rule, checked ->
-                                        selectedIds = normalizeSelectedRuleIds(
-                                            performanceType,
-                                            toggleRule(selectedIds, rule, manualRules, checked),
-                                            rules
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    if (initialShift == null) {
-                        absenceRule?.let { selectedAbsence ->
-                            item {
-                                EditorSectionCard(title = "${selectedAbsence.name}: periodo") {
-                                    Text(
-                                        "Dal ${italianTitle(editorDate.format(shortDayFormatter))}. Scegli l'ultimo giorno del periodo.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    PickerField(
-                                        label = "Fino al",
-                                        value = italianTitle(effectiveRangeEnd.format(shortDayFormatter)),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = {
-                                            val current = effectiveRangeEnd
-                                            DatePickerDialog(
-                                                context,
-                                                { _, year, month, day ->
-                                                    val picked = LocalDate.of(year, month + 1, day)
-                                                    rangeEndDate = if (picked.isBefore(editorDate)) editorDate else picked
-                                                },
-                                                current.year,
-                                                current.monthValue - 1,
-                                                current.dayOfMonth
-                                            ).show()
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (suggestedCompanions.isNotEmpty()) {
-                        item {
-                            EditorSectionCard(title = "Suggerite dalla selezione") {
-                                Text(
-                                    "Puoi aggiungerle con un tocco.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    suggestedCompanions.take(6).forEach { rule ->
-                                        OutlinedButton(
-                                            onClick = { selectedIds = normalizeSelectedRuleIds(
-                                                performanceType,
-                                                toggleRule(selectedIds, rule, manualRules, true),
-                                                rules
-                                            ) }
-                                        ) {
-                                            Text("＋ ${rule.name}")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    coherenceWarnings.forEach { warning ->
-                        item { WarningPanel(warning) }
-                    }
-                    relationWarnings.forEach { warning ->
-                        item { WarningPanel(warning) }
-                    }
-
-                    saveValidationMessage?.let { message ->
-                        item { WarningPanel(message) }
-                    }
-                    error?.let { message ->
-                        item { WarningPanel(message) }
-                    }
-
-                    if (preview != null) {
-                        item {
-                            TextButton(
-                                onClick = { showBreakdown = !showBreakdown },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(if (showBreakdown) "Nascondi dettaglio calcolo" else "Vedi dettaglio calcolo")
-                            }
-                        }
-                    }
-
-                    if (showBreakdown) {
-                        preview?.let { pay ->
-                            item {
-                                EditorSectionCard(title = "Dettaglio calcolo") {
-                                    BreakdownLine("Base", pay.basePayCents)
-                                    pay.allowanceLines.forEach { line ->
-                                        BreakdownLine(line.name, line.amountCents)
-                                    }
-                                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                                    BreakdownLine("Totale", pay.totalPayCents, bold = true, primary = true)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PickerField(
+internal fun PickerField(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
@@ -1378,7 +522,7 @@ private fun PickerField(
 }
 
 @Composable
-private fun EditorSectionCard(title: String, content: @Composable () -> Unit) {
+internal fun EditorSectionCard(title: String, content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1393,7 +537,7 @@ private fun EditorSectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun AllowanceCategoryCard(
+internal fun AllowanceCategoryCard(
     category: AllowanceCategory,
     rules: List<AllowanceRuleEntity>,
     selectedIds: Set<Long>,
@@ -1492,7 +636,7 @@ private fun AllowanceCategoryCard(
 }
 
 @Composable
-private fun AllowanceRuleTile(
+internal fun AllowanceRuleTile(
     rule: AllowanceRuleEntity,
     checked: Boolean,
     performanceType: PerformanceType,
@@ -1549,7 +693,7 @@ private fun AllowanceRuleTile(
 }
 
 @Composable
-private fun InfoPanel(text: String) {
+internal fun InfoPanel(text: String) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
         shape = RoundedCornerShape(12.dp),
@@ -1565,7 +709,7 @@ private fun InfoPanel(text: String) {
 }
 
 @Composable
-private fun WarningPanel(text: String) {
+internal fun WarningPanel(text: String) {
     Surface(
         color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
         shape = RoundedCornerShape(12.dp),
@@ -1581,116 +725,7 @@ private fun WarningPanel(text: String) {
 }
 
 @Composable
-private fun SummaryScreen(repository: PortRepository) {
-    val rows by repository.shiftRows.collectAsState(initial = emptyList())
-    val rules by repository.rules.collectAsState(initial = emptyList())
-    var month by remember { mutableStateOf(YearMonth.now()) }
-
-    val monthRows = remember(rows, month) { rows.filter { YearMonth.from(rowDate(it)) == month } }
-    val total = monthRows.sumOf { it.pay.totalPayCents }
-    val baseTotal = monthRows.sumOf { it.pay.basePayCents }
-    val allowanceTotal = monthRows.sumOf { it.pay.allowancesCents }
-    val daysWorked = monthRows.map(::rowDate).distinct().size
-    val groupedDays = monthRows.groupBy(::rowDate).toList().sortedByDescending { it.first }
-
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Row(
-                    Modifier.padding(10.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(onClick = { month = month.minusMonths(1) }) { Text("‹") }
-                    Text(
-                        italianTitle(month.format(monthFormatter)),
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    TextButton(onClick = { month = month.plusMonths(1) }) { Text("›") }
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Column(Modifier.padding(18.dp)) {
-                    Text("Totale mese", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        money(total),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Base ${money(baseTotal)}  •  Indennità ${money(allowanceTotal)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Giorni lavorati", daysWorked.toString(), Modifier.weight(1f))
-                MetricCard("Prestazioni", monthRows.size.toString(), Modifier.weight(1f))
-            }
-        }
-
-        item { SectionHeader("Totali per tipo di prestazione") }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PerformanceType.entries.forEach { type ->
-                        val matching = monthRows.filter { it.shift.performanceType == type }
-                        PerformanceTotalRow(type, matching.size, matching.sumOf { it.pay.totalPayCents })
-                    }
-                }
-            }
-        }
-
-        item { PayslipComparisonCard(month = month, rows = monthRows, rules = rules) }
-        item { MonthlyExportCard(month = month, rows = monthRows) }
-
-        item { SectionHeader("Giornate del mese") }
-        if (groupedDays.isEmpty()) {
-            item { EmptySummaryCard() }
-        } else {
-            items(groupedDays, key = { it.first }) { (date, dayRows) ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(italianTitle(date.format(shortDayFormatter)), fontWeight = FontWeight.SemiBold)
-                            Text(money(dayRows.sumOf { it.pay.totalPayCents }), fontWeight = FontWeight.Bold)
-                        }
-                        dayRows.forEach { row ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(
-                                    performanceLabel(row.shift.performanceType) +
-                                        mainAllowanceName(row)?.let { " • $it" }.orEmpty(),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(money(row.pay.totalPayCents), style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PerformanceTotalRow(type: PerformanceType, count: Int, totalCents: Long) {
+internal fun PerformanceTotalRow(type: PerformanceType, count: Int, totalCents: Long) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1705,7 +740,7 @@ private fun PerformanceTotalRow(type: PerformanceType, count: Int, totalCents: L
 }
 
 @Composable
-private fun EmptySummaryCard() {
+internal fun EmptySummaryCard() {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
         Text(
             "Nessuna prestazione registrata in questo mese.",
@@ -1716,99 +751,7 @@ private fun EmptySummaryCard() {
 }
 
 @Composable
-private fun RulesScreen(repository: PortRepository) {
-    val rules by repository.rules.collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    var filter by remember { mutableStateOf(RuleFilter.TURNI) }
-    var search by remember { mutableStateOf("") }
-    var editor by remember { mutableStateOf<AllowanceRuleEntity?>(null) }
-    var createNew by remember { mutableStateOf(false) }
-
-    val categories = when (filter) {
-        RuleFilter.TURNI -> setOf(AllowanceCategory.TURNO, AllowanceCategory.MEZZO_TURNO)
-        RuleFilter.DOPPI -> setOf(AllowanceCategory.DOPPIO)
-        RuleFilter.GENERALI -> setOf(
-            AllowanceCategory.AVVIAMENTO,
-            AllowanceCategory.DISAGIO,
-            AllowanceCategory.AREA,
-            AllowanceCategory.ALTRE_VOCI,
-            AllowanceCategory.ALTRO
-        )
-    }
-    val filteredRules = rules.filter {
-        it.code !in retiredRuleCodes &&
-            it.category in categories &&
-            (search.isBlank() || it.name.contains(search, ignoreCase = true) || it.code.contains(search, ignoreCase = true))
-    }
-
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                RuleFilter.entries.forEach { tab ->
-                    FilterChip(selected = filter == tab, onClick = { filter = tab }, label = { Text(tab.label) })
-                }
-            }
-        }
-        item {
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                label = { Text("Cerca indennità") },
-                leadingIcon = { Text("⌕") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        item {
-            Button(onClick = { createNew = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("＋  Nuova voce")
-            }
-        }
-
-        if (filteredRules.isEmpty()) {
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Text("Nessuna voce trovata.", Modifier.padding(18.dp))
-                }
-            }
-        } else {
-            val grouped = filteredRules.groupBy { it.category }
-            visibleCategories.filter { it in grouped.keys }.forEach { category ->
-                item { SectionHeader(categoryLabel(category)) }
-                items(grouped[category].orEmpty(), key = { it.id }) { rule ->
-                    RuleCard(
-                        rule = rule,
-                        onEnabledChanged = { enabled -> scope.launch { repository.saveRule(rule.copy(enabled = enabled)) } },
-                        onEdit = { editor = rule }
-                    )
-                }
-            }
-        }
-        item { Spacer(Modifier.height(8.dp)) }
-    }
-
-    if (createNew || editor != null) {
-        RuleEditorDialog(
-            initial = editor,
-            onDismiss = { createNew = false; editor = null },
-            onSave = { rule ->
-                scope.launch { repository.saveRule(rule) }
-                createNew = false
-                editor = null
-            }
-        )
-    }
-}
-
-@Composable
-private fun RuleCard(
+internal fun RuleCard(
     rule: AllowanceRuleEntity,
     onEnabledChanged: (Boolean) -> Unit,
     onEdit: () -> Unit
@@ -1839,7 +782,7 @@ private fun RuleCard(
 }
 
 @Composable
-private fun RuleEditorDialog(
+internal fun RuleEditorDialog(
     initial: AllowanceRuleEntity?,
     onDismiss: () -> Unit,
     onSave: (AllowanceRuleEntity) -> Unit
@@ -1988,118 +931,7 @@ private fun RuleEditorDialog(
 }
 
 @Composable
-private fun SettingsScreen(repository: PortRepository) {
-    val workers by repository.workers.collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    val worker = workers.firstOrNull()
-
-    var name by remember(worker?.id, worker?.name) { mutableStateOf(worker?.name ?: "") }
-    var mode by remember(worker?.id, worker?.basePayMode) { mutableStateOf(worker?.basePayMode ?: BasePayMode.FIXED_PER_SHIFT) }
-    var fixedBase by remember(worker?.id, worker?.baseShiftCents) { mutableStateOf(worker?.baseShiftCents?.toEuroText() ?: "67.80") }
-    var hourlyRate by remember(worker?.id, worker?.hourlyRateCents) { mutableStateOf(worker?.hourlyRateCents?.toEuroText() ?: "0.00") }
-    var doubleBase by remember(worker?.id, worker?.doubleBaseCents) { mutableStateOf(worker?.doubleBaseCents?.toEuroText() ?: "88.40") }
-    var irpef by remember(worker?.id, worker?.irpefBasisPoints) { mutableStateOf(worker?.irpefBasisPoints?.let { "%.2f".format(Locale.US, it / 100.0) } ?: "30.00") }
-    var scatti by remember(worker?.id, worker?.senioritySteps) { mutableStateOf((worker?.senioritySteps ?: 3).toString()) }
-    var savedMessage by remember { mutableStateOf<String?>(null) }
-
-    val doubleCentsPreview = doubleBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: 8840
-
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            SettingsCard("Profilo lavoratore") {
-                OutlinedTextField(name, { name = it }, label = { Text("Nome") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            }
-        }
-
-        item {
-            SettingsCard("Tariffe base") {
-                Text("Calcolo paga base", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = mode == BasePayMode.FIXED_PER_SHIFT, onClick = { mode = BasePayMode.FIXED_PER_SHIFT }, label = { Text("Turno fisso") })
-                    FilterChip(selected = mode == BasePayMode.HOURLY, onClick = { mode = BasePayMode.HOURLY }, label = { Text("Oraria") })
-                }
-                Spacer(Modifier.height(8.dp))
-                SettingsMoneyField("Base turno", fixedBase, { fixedBase = it })
-                SettingsMoneyField("Paga base oraria", hourlyRate, { hourlyRate = it })
-                SettingsMoneyField("Base Doppio", doubleBase, { doubleBase = it })
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Base Mezzo Doppio")
-                        Text(money((doubleCentsPreview / 2.0).roundToLong()), fontWeight = FontWeight.SemiBold)
-                    }
-                }
-                Text(
-                    "Il Mezzo Doppio è sempre il 50% della base Doppio.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        item {
-            SettingsCard("Altri parametri") {
-                OutlinedTextField(irpef, { irpef = it }, label = { Text("IRPEF %") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(scatti, { scatti = it }, label = { Text("Scatti") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Text(
-                    "IRPEF e scatti sono parametri salvati ma non vengono ancora applicati al totale lordo.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        item { PresetSettingsCard() }
-        item { SpecialCalendarSettingsCard() }
-        item { BackupSettingsCard(repository) }
-
-        savedMessage?.let { message ->
-            item { InfoPanel(message) }
-        }
-
-        item {
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    val fixedCents = fixedBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val hourlyCents = hourlyRate.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val doubleCents = doubleBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val irpefBp = irpef.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val stepCount = scatti.toIntOrNull() ?: return@Button
-                    scope.launch {
-                        repository.saveWorker(
-                            WorkerEntity(
-                                id = worker?.id ?: 0,
-                                name = name.ifBlank { "Lavoratore" },
-                                hourlyRateCents = hourlyCents,
-                                basePayMode = mode,
-                                baseShiftCents = fixedCents,
-                                doubleBaseCents = doubleCents,
-                                irpefBasisPoints = irpefBp,
-                                senioritySteps = stepCount
-                            )
-                        )
-                    }
-                    savedMessage = "Impostazioni salvate."
-                }
-            ) {
-                Text("Salva impostazioni")
-            }
-        }
-        item { Spacer(Modifier.height(8.dp)) }
-    }
-}
-
-@Composable
-private fun SettingsCard(title: String, content: @Composable () -> Unit) {
+internal fun SettingsCard(title: String, content: @Composable () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -2110,7 +942,7 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingsMoneyField(label: String, value: String, onValueChange: (String) -> Unit) {
+internal fun SettingsMoneyField(label: String, value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -2121,7 +953,7 @@ private fun SettingsMoneyField(label: String, value: String, onValueChange: (Str
 }
 
 @Composable
-private fun MetricCard(title: String, value: String, modifier: Modifier = Modifier) {
+internal fun MetricCard(title: String, value: String, modifier: Modifier = Modifier) {
     Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(14.dp)) {
             Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2131,7 +963,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun SectionHeader(title: String, trailing: String? = null) {
+internal fun SectionHeader(title: String, trailing: String? = null) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         trailing?.let {
@@ -2140,7 +972,7 @@ private fun SectionHeader(title: String, trailing: String? = null) {
     }
 }
 
-private fun parseShiftOrNull(
+internal fun parseShiftOrNull(
     id: Long,
     workerId: Long,
     startText: String,
@@ -2165,7 +997,7 @@ private fun parseShiftOrNull(
     )
 }.getOrNull()
 
-private fun expandShiftRange(base: ShiftEntity, endDate: LocalDate): List<ShiftEntity> {
+internal fun expandShiftRange(base: ShiftEntity, endDate: LocalDate): List<ShiftEntity> {
     val zone = ZoneId.of(base.zoneId)
     val start = Instant.ofEpochMilli(base.startEpochMillis).atZone(zone)
     val end = Instant.ofEpochMilli(base.endEpochMillis).atZone(zone)
@@ -2187,7 +1019,7 @@ private fun expandShiftRange(base: ShiftEntity, endDate: LocalDate): List<ShiftE
     return result
 }
 
-private fun performanceInfo(worker: WorkerEntity, type: PerformanceType): String = when (type) {
+internal fun performanceInfo(worker: WorkerEntity, type: PerformanceType): String = when (type) {
     PerformanceType.TURNO ->
         "Base ${money(worker.baseShiftCents)}. La Polivalenza viene aggiunta automaticamente ai turni lavorati con indennità di turno."
     PerformanceType.DOPPIO ->
@@ -2196,7 +1028,7 @@ private fun performanceInfo(worker: WorkerEntity, type: PerformanceType): String
         "Base ${money((worker.doubleBaseCents / 2.0).roundToLong())}. Area e Disagi restano interi; si dimezza solo l'indennità di turno del Doppio."
 }
 
-private fun categoryEditorTitle(category: AllowanceCategory, performanceType: PerformanceType): String = when (category) {
+internal fun categoryEditorTitle(category: AllowanceCategory, performanceType: PerformanceType): String = when (category) {
     AllowanceCategory.TURNO -> "Indennità di turno"
     AllowanceCategory.MEZZO_TURNO -> "Mezzo turno"
     AllowanceCategory.DOPPIO -> if (performanceType == PerformanceType.MEZZO_DOPPIO) "Indennità Mezzo Doppio" else "Indennità Doppio"
@@ -2207,7 +1039,7 @@ private fun categoryEditorTitle(category: AllowanceCategory, performanceType: Pe
     AllowanceCategory.ALTRO -> "Altro"
 }
 
-private fun toggleRule(
+internal fun toggleRule(
     current: Set<Long>,
     rule: AllowanceRuleEntity,
     allRules: List<AllowanceRuleEntity>,
@@ -2246,7 +1078,7 @@ private fun toggleRule(
     }
 }
 
-private fun categoriesForPerformance(type: PerformanceType): List<AllowanceCategory> = when (type) {
+internal fun categoriesForPerformance(type: PerformanceType): List<AllowanceCategory> = when (type) {
     PerformanceType.TURNO -> listOf(
         AllowanceCategory.TURNO,
         AllowanceCategory.MEZZO_TURNO,
@@ -2266,7 +1098,7 @@ private fun categoriesForPerformance(type: PerformanceType): List<AllowanceCateg
     )
 }
 
-private fun categoryLabel(category: AllowanceCategory): String = when (category) {
+internal fun categoryLabel(category: AllowanceCategory): String = when (category) {
     AllowanceCategory.TURNO -> "Turni"
     AllowanceCategory.MEZZO_TURNO -> "Mezzi turni"
     AllowanceCategory.AVVIAMENTO -> "Avviamento"
@@ -2277,32 +1109,32 @@ private fun categoryLabel(category: AllowanceCategory): String = when (category)
     AllowanceCategory.ALTRO -> "Altro"
 }
 
-private fun categoryShortLabel(category: AllowanceCategory): String = when (category) {
+internal fun categoryShortLabel(category: AllowanceCategory): String = when (category) {
     AllowanceCategory.AVVIAMENTO -> "Avviam."
     AllowanceCategory.MEZZO_TURNO -> "Mezzo turno"
     AllowanceCategory.ALTRE_VOCI -> "Altre"
     else -> categoryLabel(category)
 }
 
-private fun performanceLabel(type: PerformanceType): String = when (type) {
+internal fun performanceLabel(type: PerformanceType): String = when (type) {
     PerformanceType.TURNO -> "Turno"
     PerformanceType.DOPPIO -> "Doppio"
     PerformanceType.MEZZO_DOPPIO -> "Mezzo Doppio"
 }
 
-private fun performanceColor(type: PerformanceType): Color = when (type) {
+internal fun performanceColor(type: PerformanceType): Color = when (type) {
     PerformanceType.TURNO -> PortGreen
     PerformanceType.DOPPIO -> PortPurple
     PerformanceType.MEZZO_DOPPIO -> PortOrange
 }
 
-private fun typeLabel(type: AllowanceCalculationType): String = when (type) {
+internal fun typeLabel(type: AllowanceCalculationType): String = when (type) {
     AllowanceCalculationType.FIXED_PER_SHIFT -> "Fissa"
     AllowanceCalculationType.PER_HOUR -> "€/h"
     AllowanceCalculationType.PERCENT_BASE -> "%"
 }
 
-private fun ruleDescription(rule: AllowanceRuleEntity): String {
+internal fun ruleDescription(rule: AllowanceRuleEntity): String {
     val amount = when (rule.calculationType) {
         AllowanceCalculationType.PERCENT_BASE -> "${rule.value / 100.0}% della base"
         AllowanceCalculationType.PER_HOUR -> "${money(rule.value)}/h"
@@ -2315,7 +1147,7 @@ private fun ruleDescription(rule: AllowanceRuleEntity): String {
     return amount + window + relation
 }
 
-private fun ruleValueLabel(rule: AllowanceRuleEntity, performanceType: PerformanceType): String {
+internal fun ruleValueLabel(rule: AllowanceRuleEntity, performanceType: PerformanceType): String {
     if (rule.calculationType == AllowanceCalculationType.PERCENT_BASE) return "${rule.value / 100.0}%"
     if (rule.calculationType == AllowanceCalculationType.PER_HOUR) return "${money(rule.value)}/h"
     val cents = if (performanceType == PerformanceType.MEZZO_DOPPIO && rule.category == AllowanceCategory.DOPPIO) {
@@ -2324,48 +1156,48 @@ private fun ruleValueLabel(rule: AllowanceRuleEntity, performanceType: Performan
     return money(cents)
 }
 
-private fun mainAllowanceName(row: ShiftWithPay): String? = row.selectedRules.firstOrNull {
+internal fun mainAllowanceName(row: ShiftWithPay): String? = row.selectedRules.firstOrNull {
     it.category == AllowanceCategory.TURNO ||
         it.category == AllowanceCategory.DOPPIO ||
         it.category == AllowanceCategory.MEZZO_TURNO
 }?.name
 
-private fun rowDate(row: ShiftWithPay): LocalDate = rowStart(row).toLocalDate()
+internal fun rowDate(row: ShiftWithPay): LocalDate = rowStart(row).toLocalDate()
 
-private fun rowStart(row: ShiftWithPay): LocalDateTime {
+internal fun rowStart(row: ShiftWithPay): LocalDateTime {
     val zone = ZoneId.of(row.shift.zoneId)
     return LocalDateTime.ofInstant(Instant.ofEpochMilli(row.shift.startEpochMillis), zone)
 }
 
-private fun rowEnd(row: ShiftWithPay): LocalDateTime {
+internal fun rowEnd(row: ShiftWithPay): LocalDateTime {
     val zone = ZoneId.of(row.shift.zoneId)
     return LocalDateTime.ofInstant(Instant.ofEpochMilli(row.shift.endEpochMillis), zone)
 }
 
-private fun clampDateToMonth(date: LocalDate, month: YearMonth): LocalDate =
+internal fun clampDateToMonth(date: LocalDate, month: YearMonth): LocalDate =
     month.atDay(minOf(date.dayOfMonth, month.lengthOfMonth()))
 
-private fun money(cents: Long): String = "€ %.2f".format(Locale.ITALY, cents / 100.0)
+internal fun money(cents: Long): String = "€ %.2f".format(Locale.ITALY, cents / 100.0)
 
-private fun Long.toEuroText(): String = "%.2f".format(Locale.US, this / 100.0)
+internal fun Long.toEuroText(): String = "%.2f".format(Locale.US, this / 100.0)
 
-private fun italianTitle(text: String): String = text.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ITALIAN) else it.toString() }
+internal fun italianTitle(text: String): String = text.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ITALIAN) else it.toString() }
 
-private fun parseTags(csv: String?): Set<String> = csv
+internal fun parseTags(csv: String?): Set<String> = csv
     ?.split(',')
     ?.map { it.trim() }
     ?.filter { it.isNotEmpty() }
     ?.toSet()
     ?: emptySet()
 
-private fun valueForEditor(rule: AllowanceRuleEntity?): String = when {
+internal fun valueForEditor(rule: AllowanceRuleEntity?): String = when {
     rule == null -> "0.00"
     else -> "%.2f".format(Locale.US, rule.value / 100.0)
 }
 
-private fun minutesToText(minutes: Int): String = "%02d:%02d".format(minutes / 60, minutes % 60)
+internal fun minutesToText(minutes: Int): String = "%02d:%02d".format(minutes / 60, minutes % 60)
 
-private fun parseTimeMinutes(text: String): Int {
+internal fun parseTimeMinutes(text: String): Int {
     val parts = text.trim().split(':')
     require(parts.size == 2)
     val hour = parts[0].toInt()
