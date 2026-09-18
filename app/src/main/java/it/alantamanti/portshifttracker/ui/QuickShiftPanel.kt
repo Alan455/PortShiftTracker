@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
+import it.alantamanti.portshifttracker.domain.PerformanceType
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -35,11 +36,16 @@ internal fun QuickShiftPanel(
     date: LocalDate,
     rules: List<AllowanceRuleEntity>,
     selectedKind: QuickShiftKind?,
+    performanceType: PerformanceType = PerformanceType.TURNO,
+    doubleBaseCents: Long? = null,
     overrideClass: PortDayClass? = null,
     onKindSelected: (QuickShiftKind) -> Unit
 ) {
     val dayClass = overrideClass ?: portDayClass(date)
-    val dayLabel = date.format(quickDateFormatter).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ITALIAN) else it.toString() }
+    val dayLabel = date.format(quickDateFormatter).replaceFirstChar {
+        if (it.isLowerCase()) it.titlecase(Locale.ITALIAN) else it.toString()
+    }
+    val kinds = quickShiftKindsFor(performanceType)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -53,10 +59,25 @@ internal fun QuickShiftPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Turno rapido", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (performanceType == PerformanceType.DOPPIO) "Doppio: scegli il turno" else "Turno rapido",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Text(dayLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (performanceType == PerformanceType.DOPPIO && doubleBaseCents != null) {
+                        Text(
+                            "Base ${moneyQuick(doubleBaseCents)} + modificatore automatico",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     if (overrideClass != null) {
-                        Text("Calendario speciale", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            "Calendario speciale",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
                 Surface(shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.primaryContainer) {
@@ -69,40 +90,28 @@ internal fun QuickShiftPanel(
                 }
             }
 
-            val kinds = QuickShiftKind.entries
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                kinds.take(3).forEach { kind ->
-                    QuickShiftTile(
-                        kind = kind,
-                        date = date,
-                        rules = rules,
-                        selected = selectedKind == kind,
-                        overrideClass = overrideClass,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onKindSelected(kind) }
-                    )
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val remainingKinds = kinds.drop(3)
-                remainingKinds.forEach { kind ->
-                    QuickShiftTile(
-                        kind = kind,
-                        date = date,
-                        rules = rules,
-                        selected = selectedKind == kind,
-                        overrideClass = overrideClass,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onKindSelected(kind) }
-                    )
-                }
-                repeat((3 - remainingKinds.size).coerceAtLeast(0)) {
-                    Spacer(Modifier.weight(1f))
+            kinds.chunked(3).forEach { rowKinds ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    rowKinds.forEach { kind ->
+                        QuickShiftTile(
+                            kind = kind,
+                            date = date,
+                            rules = rules,
+                            performanceType = performanceType,
+                            selected = selectedKind == kind,
+                            overrideClass = overrideClass,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onKindSelected(kind) }
+                        )
+                    }
+                    repeat((3 - rowKinds.size).coerceAtLeast(0)) {
+                        Spacer(Modifier.weight(1f))
+                    }
                 }
             }
 
-            selectedKind?.let { kind ->
-                val resolution = resolveQuickShift(kind, date, overrideClass)
+            selectedKind?.takeIf { it in kinds }?.let { kind ->
+                val resolution = resolveQuickShift(kind, date, overrideClass, performanceType)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -132,13 +141,18 @@ private fun QuickShiftTile(
     kind: QuickShiftKind,
     date: LocalDate,
     rules: List<AllowanceRuleEntity>,
+    performanceType: PerformanceType,
     selected: Boolean,
     overrideClass: PortDayClass?,
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val resolution = resolveQuickShift(kind, date, overrideClass)
-    val rule = rules.firstOrNull { it.code == resolution.ruleCode && it.enabled }
+    val resolution = resolveQuickShift(kind, date, overrideClass, performanceType)
+    val rule = rules.firstOrNull {
+        it.code == resolution.ruleCode &&
+            it.enabled &&
+            (it.performanceMask and performanceType.maskBit) != 0
+    }
     val shape = RoundedCornerShape(14.dp)
 
     Surface(
@@ -167,7 +181,10 @@ private fun QuickShiftTile(
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
             Text(
-                rule?.let { moneyQuick(it.value) } ?: "non disponibile",
+                rule?.let {
+                    val amount = moneyQuick(it.value)
+                    if (performanceType == PerformanceType.DOPPIO) "+$amount" else amount
+                } ?: "non disponibile",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -176,4 +193,5 @@ private fun QuickShiftTile(
     }
 }
 
-private fun moneyQuick(cents: Long): String = NumberFormat.getCurrencyInstance(Locale.ITALY).format(cents / 100.0)
+private fun moneyQuick(cents: Long): String =
+    NumberFormat.getCurrencyInstance(Locale.ITALY).format(cents / 100.0)
