@@ -38,10 +38,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.data.local.AppFeatureStore
 import it.alantamanti.portshifttracker.data.local.PayslipComparison
 import it.alantamanti.portshifttracker.data.repository.PortRepository
 import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
+import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -145,7 +147,11 @@ internal fun SummaryScreen(repository: PortRepository) {
         }
 
         item {
-            SummaryBreakdownCard(totals)
+            SummaryBreakdownCard(
+                totals = totals,
+                monthRows = monthRows,
+                rules = rules
+            )
         }
 
         item {
@@ -362,16 +368,46 @@ private fun SummaryHeroTotal(
 }
 
 @Composable
-private fun SummaryBreakdownCard(totals: MonthlyCategoryTotals) {
-    val rows = listOf(
+private fun SummaryBreakdownCard(
+    totals: MonthlyCategoryTotals,
+    monthRows: List<ShiftWithPay>,
+    rules: List<AllowanceRuleEntity>
+) {
+    val categoryRows = listOf(
         SummaryBreakdownItem("Base", totals.base, Color(0xFF2D7FF9)),
         SummaryBreakdownItem("Turno", totals.turno, Color(0xFF159A80)),
         SummaryBreakdownItem("Avviamento", totals.avviamento, Color(0xFFE17932)),
         SummaryBreakdownItem("Disagi", totals.disagio, Color(0xFFD95C69)),
         SummaryBreakdownItem("Area", totals.area, Color(0xFF7357D9)),
-        SummaryBreakdownItem("Doppio", totals.doppio, Color(0xFFF2B01E)),
-        SummaryBreakdownItem("Altre voci", totals.altre, Color(0xFF607D9B))
+        SummaryBreakdownItem("Doppio", totals.doppio, Color(0xFFF2B01E))
     )
+
+    val rulesById = rules.associateBy { it.id }
+    val otherRows = monthRows
+        .flatMap { it.pay.allowanceLines }
+        .filter { line ->
+            when (rulesById[line.ruleId]?.category) {
+                AllowanceCategory.ALTRE_VOCI,
+                AllowanceCategory.ALTRO,
+                null -> true
+                else -> false
+            }
+        }
+        .groupBy { it.ruleId to it.name }
+        .map { (key, lines) ->
+            val rule = rulesById[key.first]
+            SummaryOtherBreakdownItem(
+                label = rule?.name ?: key.second,
+                cents = lines.sumOf { it.amountCents },
+                priority = rule?.priority ?: Int.MAX_VALUE
+            )
+        }
+        .filter { it.cents != 0L }
+        .sortedWith(
+            compareBy<SummaryOtherBreakdownItem> { it.priority }
+                .thenBy { it.label }
+        )
+
     val denominator = totals.total.coerceAtLeast(1L)
 
     Card(
@@ -387,48 +423,110 @@ private fun SummaryBreakdownCard(totals: MonthlyCategoryTotals) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            rows.forEach { item ->
-                val ratio = (item.cents.toFloat() / denominator.toFloat()).coerceIn(0f, 1f)
+
+            categoryRows.forEach { item ->
+                SummaryBreakdownRow(
+                    label = item.label,
+                    cents = item.cents,
+                    total = totals.total,
+                    color = item.color
+                )
+            }
+
+            if (otherRows.isNotEmpty()) {
+                Spacer(Modifier.height(3.dp))
                 Row(
                     Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(
-                        Modifier
-                            .size(9.dp)
-                            .background(item.color, CircleShape)
-                    )
                     Text(
-                        item.label,
-                        modifier = Modifier.width(82.dp),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    LinearProgressIndicator(
-                        progress = { ratio },
-                        modifier = Modifier.weight(1f).height(7.dp),
-                        color = item.color,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                    Text(
-                        money(item.cents),
-                        modifier = Modifier.width(72.dp),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.labelMedium,
+                        "Altre voci",
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        summaryPercent(item.cents, totals.total),
-                        modifier = Modifier.width(38.dp),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.labelSmall,
+                        money(otherRows.sumOf { it.cents }),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                otherRows.forEach { item ->
+                    SummaryBreakdownRow(
+                        label = item.label,
+                        cents = item.cents,
+                        total = totals.total,
+                        color = Color(0xFF607D9B),
+                        nested = true
                     )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun SummaryBreakdownRow(
+    label: String,
+    cents: Long,
+    total: Long,
+    color: Color,
+    nested: Boolean = false
+) {
+    val denominator = total.coerceAtLeast(1L)
+    val ratio = (cents.toFloat() / denominator.toFloat()).coerceIn(0f, 1f)
+
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Spacer(
+            Modifier
+                .size(if (nested) 7.dp else 9.dp)
+                .background(
+                    if (nested) color.copy(alpha = 0.72f) else color,
+                    CircleShape
+                )
+        )
+        Text(
+            label,
+            modifier = Modifier.width(96.dp),
+            style = if (nested) MaterialTheme.typography.labelMedium
+            else MaterialTheme.typography.bodySmall,
+            color = if (nested) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.onSurface
+        )
+        LinearProgressIndicator(
+            progress = { ratio },
+            modifier = Modifier.weight(1f).height(if (nested) 5.dp else 7.dp),
+            color = color,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+        Text(
+            money(cents),
+            modifier = Modifier.width(72.dp),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            summaryPercent(cents, total),
+            modifier = Modifier.width(38.dp),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private data class SummaryOtherBreakdownItem(
+    val label: String,
+    val cents: Long,
+    val priority: Int
+)
 
 @Composable
 private fun SummaryMonthTrendCard(
