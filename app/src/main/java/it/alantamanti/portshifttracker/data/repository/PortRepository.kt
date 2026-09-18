@@ -13,6 +13,9 @@ import it.alantamanti.portshifttracker.domain.Shift
 import it.alantamanti.portshifttracker.domain.Worker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 class PortRepository(
     private val db: AppDatabase,
@@ -35,7 +38,11 @@ class PortRepository(
 
         ss.mapNotNull { shift ->
             val worker = workerMap[shift.workerId] ?: return@mapNotNull null
-            val selectedIds = selectedByShift[shift.id].orEmpty()
+            val selectedIds = normalizeSelectedRuleIds(
+                shift.performanceType,
+                selectedByShift[shift.id].orEmpty(),
+                rs
+            )
             val breakdown = calculator.calculate(
                 worker.toDomain(),
                 shift.toDomain(),
@@ -50,21 +57,77 @@ class PortRepository(
 
     suspend fun saveWorker(worker: WorkerEntity) = workerDao.upsert(worker)
 
-    suspend fun addShiftWithSelections(shift: ShiftEntity, selectedRuleIds: Set<Long>): Long = db.withTransaction {
-        val shiftId = shiftDao.insert(shift)
-        if (selectedRuleIds.isNotEmpty()) {
-            selectionDao.insertAll(selectedRuleIds.map { ShiftAllowanceSelectionEntity(shiftId, it) })
+    suspend fun addShiftWithSelections(shift: ShiftEntity, selectedRuleIds: Set<Long>): Long =
+        addShiftsWithSelections(listOf(shift), selectedRuleIds).single()
+
+    /**
+     * Salva un intero periodo (es. Ferie/Malattia) in una sola transazione:
+     * o vengono inserite tutte le giornate, oppure nessuna.
+     */
+    suspend fun addShiftsWithSelections(
+        shifts: List<ShiftEntity>,
+        selectedRuleIds: Set<Long>
+    ): List<Long> = db.withTransaction {
+        require(shifts.isNotEmpty()) { "Nessuna prestazione da salvare" }
+        val allRules = ruleDao.getAll()
+        val seen = mutableSetOf<Triple<Long, LocalDate, it.alantamanti.portshifttracker.domain.PerformanceType>>()
+        val result = mutableListOf<Long>()
+
+        shifts.forEach { shift ->
+            val date = localDateOf(shift)
+            val key = Triple(shift.workerId, date, shift.performanceType)
+            if (!seen.add(key)) throw DuplicatePerformanceException(date, shift.performanceType)
+            ensureNoDuplicate(shift)
+
+            val normalized = normalizeSelectedRuleIds(shift.performanceType, selectedRuleIds, allRules)
+            selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
+                throw IllegalArgumentException(it)
+            }
+
+            val shiftId = shiftDao.insert(shift)
+            if (normalized.isNotEmpty()) {
+                selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(shiftId, it) })
+            }
+            result += shiftId
         }
-        shiftId
+        result
     }
 
-    suspend fun updateShiftWithSelections(shift: ShiftEntity, selectedRuleIds: Set<Long>) = db.withTransaction {
+    suspend fun updateShiftWithSelections(
+        shift: ShiftEntity,
+        selectedRuleIds: Set<Long>
+    ) = db.withTransaction {
+        val allRules = ruleDao.getAll()
+        ensureNoDuplicate(shift, excludeId = shift.id)
+        val normalized = normalizeSelectedRuleIds(shift.performanceType, selectedRuleIds, allRules)
+        selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
+            throw IllegalArgumentException(it)
+        }
+
         shiftDao.update(shift)
         selectionDao.deleteForShift(shift.id)
-        if (selectedRuleIds.isNotEmpty()) {
-            selectionDao.insertAll(selectedRuleIds.map { ShiftAllowanceSelectionEntity(shift.id, it) })
+        if (normalized.isNotEmpty()) {
+            selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(shift.id, it) })
         }
     }
+
+    private suspend fun ensureNoDuplicate(shift: ShiftEntity, excludeId: Long = 0) {
+        val zone = ZoneId.of(shift.zoneId)
+        val date = localDateOf(shift)
+        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val duplicate = shiftDao.findSameTypeInDay(
+            workerId = shift.workerId,
+            performanceType = shift.performanceType,
+            startInclusive = start,
+            endExclusive = end,
+            excludeId = excludeId
+        )
+        if (duplicate != null) throw DuplicatePerformanceException(date, shift.performanceType)
+    }
+
+    private fun localDateOf(shift: ShiftEntity): LocalDate =
+        Instant.ofEpochMilli(shift.startEpochMillis).atZone(ZoneId.of(shift.zoneId)).toLocalDate()
 
     suspend fun deleteShift(shift: ShiftEntity) = shiftDao.delete(shift)
     suspend fun saveRule(rule: AllowanceRuleEntity) = ruleDao.upsert(rule)
@@ -134,4 +197,12 @@ fun AllowanceRuleEntity.toDomain() = AllowanceRule(
     tagsCsv = tagsCsv,
     recommendedWithAnyTagCsv = recommendedWithAnyTagCsv,
     performanceMask = performanceMask
+)
+
+
+class DuplicatePerformanceException(
+    val date: LocalDate,
+    val performanceType: it.alantamanti.portshifttracker.domain.PerformanceType
+) : IllegalStateException(
+    "Esiste già una prestazione ${performanceType.name.replace('_', ' ')} il ${date}."
 )
