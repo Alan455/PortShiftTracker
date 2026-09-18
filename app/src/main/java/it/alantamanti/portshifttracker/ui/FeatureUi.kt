@@ -355,7 +355,18 @@ internal fun PayslipComparisonCard(
         OutlinedButton(
             onClick = {
                 scope.launch {
-                    val current = existing ?: PayslipComparison(month = month.toString())
+                    val current = PayslipComparison(
+                        month = month.toString(),
+                        totalCents = parseEuro(totalText),
+                        baseCents = parseEuro(baseText),
+                        turnoCents = parseEuro(turnoText),
+                        avviamentoCents = parseEuro(avvText),
+                        disagioCents = parseEuro(disagioText),
+                        areaCents = parseEuro(areaText),
+                        doppioCents = parseEuro(doppioText),
+                        altreCents = parseEuro(altreText),
+                        locked = existing?.locked ?: false
+                    )
                     store.savePayslip(current.copy(locked = !current.locked))
                 }
             },
