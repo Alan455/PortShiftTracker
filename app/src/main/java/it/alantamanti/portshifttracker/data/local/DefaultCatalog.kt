@@ -17,7 +17,7 @@ object DefaultCatalog {
 
     fun rules(): List<AllowanceRuleEntity> = buildList {
         // TURNI / maggiorazioni del tipo di turno
-        add(fixed("G", "Giornaliero", 0, AllowanceCategory.TURNO, 10, group = "TIPO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
+        add(fixed("G", "Giornaliero", 9000, AllowanceCategory.TURNO, 10, group = "TIPO_TURNO", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("POM", "Pomeriggio", 0, AllowanceCategory.TURNO, 11, group = "TIPO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("MAT", "Mattina", 0, AllowanceCategory.TURNO, 12, group = "TIPO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("MATF", "Mattina festivo", 4793, AllowanceCategory.TURNO, 13, group = "TIPO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
@@ -91,7 +91,7 @@ object DefaultCatalog {
         add(fixed("DOP_SERAS2", "SeraS2", 2462, AllowanceCategory.DOPPIO, 406, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAF", "SeraF", 5219, AllowanceCategory.DOPPIO, 407, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAF2", "SeraF2", 6119, AllowanceCategory.DOPPIO, 408, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
-        add(fixed("DOP_G", "G", 5300, AllowanceCategory.DOPPIO, 409, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_G", "Mezzo Giornaliero", 4500, AllowanceCategory.DOPPIO, 409, group = "DOPPIO", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.DOPPIO.maskBit))
         add(fixed(
             "DOP_TU_MEZZO", "TUMezzo", 3390, AllowanceCategory.MEZZO_TURNO, 410,
             group = "MEZZO_TURNO",
@@ -120,7 +120,7 @@ object DefaultCatalog {
         add(fixed("ALT_IMA", "IMA", 5230, AllowanceCategory.ALTRE_VOCI, 505, group = "SOSTITUISCE_BASE", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("ALT_MEZZA_IMA", "Mezza IMA", 2615, AllowanceCategory.ALTRE_VOCI, 5051, group = "SOSTITUISCE_BASE", turnAllowanceMultiplierBasisPoints = 5000, recommendedWithAnyTagCsv = "MEZZO_TURNO", performanceMask = PerformanceType.TURNO.maskBit))
         add(fixed("ALT_POLIVALENZA", "Polivalenza", 852, AllowanceCategory.ALTRE_VOCI, 507, applicationMode = AllowanceApplicationMode.AUTO, autoTrigger = AllowanceAutoTrigger.WHEN_TURNO_SELECTED, performanceMask = PerformanceType.TURNO.maskBit))
-        add(fixed("ALT_GIORNALIERO_87", "Giornaliero", 8700, AllowanceCategory.ALTRE_VOCI, 509))
+        add(fixed("ALT_GIORNALIERO_87", "Giornaliero (legacy)", 8700, AllowanceCategory.ALTRE_VOCI, 509, enabled = false))
         add(fixed("ALT_CONGEDI_LUI", "Congedi lui", 0, AllowanceCategory.ALTRE_VOCI, 510, enabled = false))
         add(fixed("ALT_CONGEDI_LEI", "Congedi lei", 0, AllowanceCategory.ALTRE_VOCI, 511, enabled = false))
     }
