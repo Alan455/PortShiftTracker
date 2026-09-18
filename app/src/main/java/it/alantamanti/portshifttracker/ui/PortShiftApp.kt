@@ -870,7 +870,7 @@ private fun ShiftEditorScreen(
                                                     .onFailure { failure ->
                                                         error = when (failure) {
                                                             is DuplicatePerformanceException ->
-                                                                "Esiste già una ${performanceLabel(failure.performanceType)} in questa giornata."
+                                                                "Esiste già una ${performanceLabel(failure.performanceType)} il ${italianTitle(failure.date.format(shortDayFormatter))}."
                                                             else -> failure.message ?: "Errore durante il salvataggio."
                                                         }
                                                     }
