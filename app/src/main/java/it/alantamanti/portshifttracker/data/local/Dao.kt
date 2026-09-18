@@ -44,13 +44,16 @@ interface ShiftDao {
     @Query(
         "SELECT * FROM shifts WHERE workerId = :workerId " +
             "AND performanceType = :performanceType " +
-            "AND serviceEpochDay = :serviceEpochDay " +
+            "AND (serviceEpochDay = :serviceEpochDay OR " +
+            "(serviceEpochDay IS NULL AND startEpochMillis >= :startInclusive AND startEpochMillis < :endExclusive)) " +
             "AND id != :excludeId LIMIT 1"
     )
     suspend fun findSameTypeInDay(
         workerId: Long,
         performanceType: it.alantamanti.portshifttracker.domain.PerformanceType,
         serviceEpochDay: Long,
+        startInclusive: Long,
+        endExclusive: Long,
         excludeId: Long = 0
     ): ShiftEntity?
 
