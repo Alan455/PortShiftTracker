@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,55 +29,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val quickDateFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ITALIAN)
-
-@Composable
-internal fun EntryModeSelector(
-    quickMode: Boolean,
-    quickEnabled: Boolean,
-    onQuick: () -> Unit,
-    onDetailed: () -> Unit
-) {
-    val quickSelected = quickMode && quickEnabled
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Modalità inserimento", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Dettagliato",
-                    fontWeight = if (!quickSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (!quickSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Switch(
-                    checked = quickSelected,
-                    enabled = quickEnabled,
-                    onCheckedChange = { checked -> if (checked) onQuick() else onDetailed() },
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-                Text(
-                    "5 turni",
-                    fontWeight = if (quickSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (quickSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                if (quickEnabled)
-                    "Con 5 turni scegli il turno con un tocco: la data è quella selezionata nel calendario e data/orari non vengono mostrati."
-                else
-                    "La modalità 5 turni è disponibile per il Turno normale. Doppio e Mezzo Doppio restano in modalità dettagliata.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
 
 @Composable
 internal fun QuickShiftPanel(
