@@ -1,10 +1,25 @@
 import java.io.File
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun localOrEnvironment(name: String): String =
+    System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(name).orEmpty()
+
+fun asBuildConfigString(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
@@ -22,6 +37,27 @@ android {
         versionName = "0.12.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "FIREBASE_API_KEY",
+            asBuildConfigString(localOrEnvironment("PST_FIREBASE_API_KEY"))
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_APP_ID",
+            asBuildConfigString(localOrEnvironment("PST_FIREBASE_APP_ID"))
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_PROJECT_ID",
+            asBuildConfigString(localOrEnvironment("PST_FIREBASE_PROJECT_ID"))
+        )
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            asBuildConfigString(localOrEnvironment("PST_GOOGLE_WEB_CLIENT_ID"))
+        )
     }
 
     signingConfigs {
@@ -47,6 +83,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -79,6 +116,13 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
     androidTestImplementation("androidx.room:room-testing:$roomVersion")
+
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     testImplementation("junit:junit:4.13.2")
 }
