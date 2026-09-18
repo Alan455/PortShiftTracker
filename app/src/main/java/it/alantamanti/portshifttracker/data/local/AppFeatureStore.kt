@@ -1,8 +1,19 @@
 package it.alantamanti.portshifttracker.data.local
 
 import android.content.Context
+import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
@@ -36,103 +47,153 @@ data class PayslipComparison(
     val altreCents: Long? = null
 )
 
+private val Context.portShiftFeatureDataStore by preferencesDataStore(
+    name = "portshift_features_v2",
+    produceMigrations = { context ->
+        // Migra automaticamente il vecchio JSON da SharedPreferences al primo avvio.
+        listOf(SharedPreferencesMigration(context, "portshift_features"))
+    }
+)
+
 /**
- * Piccolo archivio configurazioni utente. I dati restano separati dalle tariffe economiche
- * e sono inclusi nel backup manuale dell'app. Il formato JSON è versionato e facilmente
- * migrabile se in futuro queste preferenze verranno spostate in Room o nel cloud.
+ * Archivio configurazioni utente basato su Jetpack DataStore.
+ *
+ * Il formato JSON resta versionato per mantenere backup e migrazione semplici,
+ * ma letture/scritture sono ora asincrone, atomiche e osservabili con Flow.
  */
 class AppFeatureStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val dataStore = context.applicationContext.portShiftFeatureDataStore
+    private val rootKey = stringPreferencesKey(ROOT_KEY)
 
-    @Synchronized
-    fun presets(): List<ShiftPreset> = root().optJSONArray("presets").orEmpty().mapObjects { obj ->
-        ShiftPreset(
-            id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
-            name = obj.optString("name", "Preset"),
-            role = obj.optString("role", ""),
-            ruleCodes = obj.optJSONArray("ruleCodes").orEmpty().mapStrings().toSet()
-        )
+    private val rootFlow: Flow<JSONObject> = dataStore.data
+        .catch { error ->
+            if (error is IOException) emit(emptyPreferences()) else throw error
+        }
+        .map { prefs -> parseRoot(prefs[rootKey]) }
+
+    val presetsFlow: Flow<List<ShiftPreset>> = rootFlow
+        .map(::readPresets)
+        .distinctUntilChanged()
+
+    val specialDaysFlow: Flow<List<SpecialDayOverride>> = rootFlow
+        .map(::readSpecialDays)
+        .distinctUntilChanged()
+
+    val payslipsFlow: Flow<List<PayslipComparison>> = rootFlow
+        .map(::readPayslips)
+        .distinctUntilChanged()
+
+    suspend fun presets(): List<ShiftPreset> = presetsFlow.first()
+
+    suspend fun upsertPreset(preset: ShiftPreset) {
+        mutate { root ->
+            val all = readPresets(root).filterNot { it.id == preset.id } + preset
+            root.put("presets", JSONArray().apply { all.forEach { put(it.toJson()) } })
+        }
     }
 
-    @Synchronized
-    fun upsertPreset(preset: ShiftPreset) {
-        val all = presets().filterNot { it.id == preset.id } + preset
-        mutate { root -> root.put("presets", JSONArray().apply { all.forEach { put(it.toJson()) } }) }
+    suspend fun deletePreset(id: String) {
+        mutate { root ->
+            val all = readPresets(root).filterNot { it.id == id }
+            root.put("presets", JSONArray().apply { all.forEach { put(it.toJson()) } })
+        }
     }
 
-    @Synchronized
-    fun deletePreset(id: String) {
-        val all = presets().filterNot { it.id == id }
-        mutate { root -> root.put("presets", JSONArray().apply { all.forEach { put(it.toJson()) } }) }
+    suspend fun specialDays(): List<SpecialDayOverride> = specialDaysFlow.first()
+
+    suspend fun specialDay(date: LocalDate): SpecialDayOverride? =
+        specialDays().firstOrNull { it.epochDay == date.toEpochDay() }
+
+    suspend fun upsertSpecialDay(value: SpecialDayOverride) {
+        mutate { root ->
+            val all = readSpecialDays(root).filterNot { it.epochDay == value.epochDay } + value
+            root.put(
+                "specialDays",
+                JSONArray().apply { all.sortedBy { it.epochDay }.forEach { put(it.toJson()) } }
+            )
+        }
     }
 
-    @Synchronized
-    fun specialDays(): List<SpecialDayOverride> = root().optJSONArray("specialDays").orEmpty().mapObjects { obj ->
-        SpecialDayOverride(
-            epochDay = obj.optLong("epochDay"),
-            label = obj.optString("label", "Giorno speciale"),
-            dayClass = runCatching { DayOverrideClass.valueOf(obj.optString("dayClass")) }.getOrDefault(DayOverrideClass.FESTIVO)
-        )
-    }.sortedBy { it.epochDay }
-
-    fun specialDay(date: LocalDate): SpecialDayOverride? = specialDays().firstOrNull { it.epochDay == date.toEpochDay() }
-
-    @Synchronized
-    fun upsertSpecialDay(value: SpecialDayOverride) {
-        val all = specialDays().filterNot { it.epochDay == value.epochDay } + value
-        mutate { root -> root.put("specialDays", JSONArray().apply { all.sortedBy { it.epochDay }.forEach { put(it.toJson()) } }) }
+    suspend fun deleteSpecialDay(epochDay: Long) {
+        mutate { root ->
+            val all = readSpecialDays(root).filterNot { it.epochDay == epochDay }
+            root.put("specialDays", JSONArray().apply { all.forEach { put(it.toJson()) } })
+        }
     }
 
-    @Synchronized
-    fun deleteSpecialDay(epochDay: Long) {
-        val all = specialDays().filterNot { it.epochDay == epochDay }
-        mutate { root -> root.put("specialDays", JSONArray().apply { all.forEach { put(it.toJson()) } }) }
+    suspend fun payslip(month: YearMonth): PayslipComparison? =
+        payslipsFlow.first().firstOrNull { it.month == month.toString() }
+
+    suspend fun savePayslip(value: PayslipComparison) {
+        mutate { root ->
+            val all = readPayslips(root).filterNot { it.month == value.month } + value
+            root.put(
+                "payslips",
+                JSONArray().apply { all.sortedBy { it.month }.forEach { put(it.toJson()) } }
+            )
+        }
     }
 
-    @Synchronized
-    fun payslip(month: YearMonth): PayslipComparison? = payslips().firstOrNull { it.month == month.toString() }
+    suspend fun exportJson(): String = rootFlow.first().toString(2)
 
-    @Synchronized
-    fun savePayslip(value: PayslipComparison) {
-        val all = payslips().filterNot { it.month == value.month } + value
-        mutate { root -> root.put("payslips", JSONArray().apply { all.sortedBy { it.month }.forEach { put(it.toJson()) } }) }
-    }
-
-    @Synchronized
-    fun exportJson(): String = root().toString(2)
-
-    @Synchronized
-    fun importJson(json: String) {
+    suspend fun importJson(json: String) {
         val parsed = JSONObject(json)
         if (!parsed.has("schemaVersion")) parsed.put("schemaVersion", SCHEMA_VERSION)
-        prefs.edit().putString(ROOT_KEY, parsed.toString()).apply()
+        require(parsed.optInt("schemaVersion", 0) in 1..SCHEMA_VERSION) {
+            "Versione impostazioni non supportata"
+        }
+        dataStore.edit { prefs -> prefs[rootKey] = parsed.toString() }
     }
 
-    private fun payslips(): List<PayslipComparison> = root().optJSONArray("payslips").orEmpty().mapObjects { obj ->
-        PayslipComparison(
-            month = obj.optString("month"),
-            totalCents = obj.optNullableLong("totalCents"),
-            baseCents = obj.optNullableLong("baseCents"),
-            turnoCents = obj.optNullableLong("turnoCents"),
-            avviamentoCents = obj.optNullableLong("avviamentoCents"),
-            disagioCents = obj.optNullableLong("disagioCents"),
-            areaCents = obj.optNullableLong("areaCents"),
-            doppioCents = obj.optNullableLong("doppioCents"),
-            altreCents = obj.optNullableLong("altreCents")
-        )
+    private suspend fun mutate(block: (JSONObject) -> Unit) {
+        dataStore.edit { prefs ->
+            val root = parseRoot(prefs[rootKey])
+            block(root)
+            prefs[rootKey] = root.toString()
+        }
     }
 
-    private fun root(): JSONObject = runCatching {
-        JSONObject(prefs.getString(ROOT_KEY, null) ?: "{}")
+    private fun parseRoot(json: String?): JSONObject = runCatching {
+        JSONObject(json ?: "{}")
     }.getOrElse { JSONObject() }.also {
         if (!it.has("schemaVersion")) it.put("schemaVersion", SCHEMA_VERSION)
     }
 
-    private fun mutate(block: (JSONObject) -> Unit) {
-        val value = root()
-        block(value)
-        prefs.edit().putString(ROOT_KEY, value.toString()).apply()
-    }
+    private fun readPresets(root: JSONObject): List<ShiftPreset> =
+        root.optJSONArray("presets").orEmpty().mapObjects { obj ->
+            ShiftPreset(
+                id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
+                name = obj.optString("name", "Preset"),
+                role = obj.optString("role", ""),
+                ruleCodes = obj.optJSONArray("ruleCodes").orEmpty().mapStrings().toSet()
+            )
+        }
+
+    private fun readSpecialDays(root: JSONObject): List<SpecialDayOverride> =
+        root.optJSONArray("specialDays").orEmpty().mapObjects { obj ->
+            SpecialDayOverride(
+                epochDay = obj.optLong("epochDay"),
+                label = obj.optString("label", "Giorno speciale"),
+                dayClass = runCatching {
+                    DayOverrideClass.valueOf(obj.optString("dayClass"))
+                }.getOrDefault(DayOverrideClass.FESTIVO)
+            )
+        }.sortedBy { it.epochDay }
+
+    private fun readPayslips(root: JSONObject): List<PayslipComparison> =
+        root.optJSONArray("payslips").orEmpty().mapObjects { obj ->
+            PayslipComparison(
+                month = obj.optString("month"),
+                totalCents = obj.optNullableLong("totalCents"),
+                baseCents = obj.optNullableLong("baseCents"),
+                turnoCents = obj.optNullableLong("turnoCents"),
+                avviamentoCents = obj.optNullableLong("avviamentoCents"),
+                disagioCents = obj.optNullableLong("disagioCents"),
+                areaCents = obj.optNullableLong("areaCents"),
+                doppioCents = obj.optNullableLong("doppioCents"),
+                altreCents = obj.optNullableLong("altreCents")
+            )
+        }
 
     private fun ShiftPreset.toJson() = JSONObject()
         .put("id", id)
@@ -160,7 +221,8 @@ class AppFeatureStore(context: Context) {
         if (value == null) put(key, JSONObject.NULL) else put(key, value)
     }
 
-    private fun JSONObject.optNullableLong(key: String): Long? = if (!has(key) || isNull(key)) null else optLong(key)
+    private fun JSONObject.optNullableLong(key: String): Long? =
+        if (!has(key) || isNull(key)) null else optLong(key)
 
     private fun JSONArray?.orEmpty(): JSONArray = this ?: JSONArray()
 
@@ -173,7 +235,6 @@ class AppFeatureStore(context: Context) {
     }
 
     companion object {
-        private const val PREFS_NAME = "portshift_features"
         private const val ROOT_KEY = "feature_store_json"
         private const val SCHEMA_VERSION = 1
     }
