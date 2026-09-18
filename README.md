@@ -1,63 +1,75 @@
-# PortShiftTracker v0.11.0
+# PortShiftTracker v0.12.0
 
-App Android nativa per registrare le prestazioni portuali e calcolare base, indennità e totale giornaliero/mensile.
+App Android nativa per registrare le prestazioni portuali, applicare automaticamente le indennità corrette e confrontare i risultati con la busta paga.
 
 ## Inserimento rapido
 - Turno ordinario: Mattina, Pomeriggio, Sera, Sera2, Notte e Giornaliero.
-- Doppio: Pom, Sera e Sera2, con base separata da €88,40.
-- Le varianti di sabato, festivo e semifestivo vengono determinate automaticamente dalla data selezionata nel calendario.
-- Il calendario speciale può forzare manualmente Feriale / Sabato / Festivo / Semifestivo.
-- TUMezzo e ONmezzo selezionano obbligatoriamente Mezza IMA anche a livello del motore di calcolo.
-- Ferie e Malattia possono essere inserite su un intervallo di date.
+- Doppio: Pom, Sera e Sera2 con base separata da €88,40.
+- Varianti di sabato, festivo e semifestivo determinate automaticamente dalla data.
+- Calendario speciale modificabile.
+- TUMezzo / ONmezzo con Mezza IMA obbligatoria anche nel motore di calcolo.
+- Ferie e Malattia inseribili su intervallo.
+- Mansioni recenti richiamabili con un tocco.
+- "Ripeti ultima configurazione" per replicare velocemente mansione, turno e indennità.
+- Copia prestazione su un'altra data con ricalcolo automatico della variante turno.
 
-## Sicurezza dei dati e coerenza
-- Il salvataggio è bloccato finché manca il tipo di turno richiesto, salvo Ferie/Malattia/IMA.
-- Una stessa prestazione non può essere inserita due volte nello stesso giorno per lo stesso lavoratore.
+## Coerenza e sicurezza dati
+- Salvataggio bloccato se manca il tipo turno richiesto.
+- Duplicati dello stesso tipo di prestazione nello stesso giorno bloccati sia nel repository sia dal database.
 - Turno + Doppio nello stesso giorno restano consentiti.
-- I periodi multi-giorno vengono salvati in una sola transazione Room: in caso di conflitto viene effettuato rollback completo.
-- Le selezioni vengono normalizzate anche nel repository e nel motore, non soltanto nell'interfaccia.
-- Le vecchie voci Doppio Giornaliero restano leggibili nello storico come voci legacy.
+- Periodi multi-giorno salvati in una singola transazione Room.
+- Eliminazione con possibilità di Annulla.
+- Mesi chiudibili dopo il controllo busta paga; eventuali modifiche richiedono conferma.
+- Room schema export attivo, database v7 e migrazione 6 → 7 testata.
+- Backup Android esplicitamente limitato a database Room e DataStore.
+- Backup manuale completo disponibile dall'app.
 
-## Interfaccia e apprendimento
-- Preset mansione / Area / Disagi / Avviamento.
-- Area, Disagi e Avviamento in liste orizzontali scorrevoli.
-- Le indennità usate di recente, nella stessa prestazione e con la stessa mansione, salgono automaticamente nell'ordine.
-- Riepilogo compatto della selezione, senza contare il tipo turno come una normale indennità.
-- Formula di calcolo visibile durante l'inserimento.
-- Calendario mensile con codici turno e supporto a più prestazioni nella stessa giornata.
+## Riepilogo, storico e statistiche
+- Riepilogo mensile con base, indennità, totale, giorni e prestazioni.
+- Statistiche mensili: Turni, Doppi, Mezzi Doppi, Avviamenti, Ferie, Malattia e voci più frequenti.
+- Andamento economico degli ultimi sei mesi.
+- Schermata Storico con ricerca per mansione, note, indennità e codice.
+- Filtri per tipo prestazione e intervallo di date.
+- Query per intervallo/mese per evitare di ricalcolare tutto lo storico ad ogni modifica.
+- Confronto con busta paga.
+- Export Excel e PDF.
 
-## Riepilogo, confronto e export
-- Riepilogo mensile per base, indennità e tipo di prestazione.
-- Confronto con i valori della busta paga.
-- Export Excel (.xlsx) e PDF.
-- Backup/ripristino completo.
-- Preset, calendario speciale e confronti busta sono salvati con Jetpack DataStore; i vecchi dati SharedPreferences vengono migrati automaticamente.
-
-## Test
-Sono presenti:
-- test unitari del motore economico;
-- test delle regole TUMezzo/ONmezzo + Mezza IMA;
-- test della scelta automatica feriale/sabato/festivo;
-- test dell'ordinamento adattivo delle indennità;
-- test strumentali Room per duplicati e salvataggi atomici;
-- test Compose dell'inserimento rapido del Doppio e delle voci storiche.
-
-Il workflow Android CI resta manuale e, quando avviato, esegue unit test, build, test strumentali/Compose e screenshot.
+## Backup e preferenze
+Preset, calendario speciale, confronti busta e chiusura mesi sono salvati con Jetpack DataStore.
+I vecchi dati SharedPreferences vengono migrati automaticamente.
 
 ## Build locale
-Il progetto usa compileSdk 36, Gradle Wrapper 9.6 e Compose BOM 2026.04.01.
-
-Da PowerShell nella cartella del progetto:
+Il progetto usa compileSdk 36, Gradle Wrapper 9.6 e Java 17.
 
 ```powershell
 .\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-Per installare direttamente sul dispositivo collegato:
-
-```powershell
-.\gradlew.bat installDebug
-```
-
 APK debug:
 `app\build\outputs\apk\debug\app-debug.apk`
+
+## Release firmata
+È presente il workflow manuale **Android signed release**. Per usarlo servono questi GitHub Secrets:
+
+- `PST_KEYSTORE_BASE64`
+- `PST_KEYSTORE_PASSWORD`
+- `PST_KEY_ALIAS`
+- `PST_KEY_PASSWORD`
+
+Il workflow genera e verifica:
+- APK release firmato;
+- AAB release firmato;
+- opzionalmente una GitHub Release v0.12.0 usando `CHANGELOG.md`.
+
+Il workflow resta manuale: nessuna build release viene avviata automaticamente ad ogni push.
+
+## Test
+La suite comprende:
+- test unitari del motore economico;
+- test TUMezzo/ONmezzo + Mezza IMA;
+- test calendario feriale/sabato/festivo;
+- test copy/repeat/mansioni recenti;
+- test repository per duplicati, rollback atomico e query per intervallo;
+- test migrazione Room 6 → 7;
+- test Compose del Doppio rapido e delle voci storiche;
+- build debug e release.
