@@ -67,7 +67,7 @@ internal fun QuickShiftPanel(
                     Text(dayLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (performanceType == PerformanceType.DOPPIO && doubleBaseCents != null) {
                         Text(
-                            "Base ${moneyQuick(doubleBaseCents)} + modificatore automatico",
+                            "Base ${moneyQuick(doubleBaseCents)} + maggiorazione ${dayClass.label.lowercase(Locale.ITALIAN)} automatica",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -110,24 +110,34 @@ internal fun QuickShiftPanel(
                 }
             }
 
-            selectedKind?.takeIf { it in kinds }?.let { kind ->
+            selectedKind?.let { kind ->
                 val resolution = resolveQuickShift(kind, date, overrideClass, performanceType)
+                val legacy = kind !in kinds
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                    color = if (legacy) MaterialTheme.colorScheme.surfaceVariant
+                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
                 ) {
                     Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Selezionato: ${resolution.compactCode}",
+                            if (legacy)
+                                "Voce storica: ${resolution.compactCode}"
+                            else
+                                "Selezionato: ${resolution.compactCode}",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = if (legacy) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
-                            resolution.explanation,
+                            if (legacy)
+                                "Questa voce resta visibile per lo storico ma non è disponibile nei nuovi inserimenti."
+                            else
+                                resolution.explanation,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = if (legacy) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 }
@@ -172,21 +182,40 @@ private fun QuickShiftTile(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(kind.label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(3.dp))
+            val title = if (performanceType == PerformanceType.DOPPIO) {
+                when (kind) {
+                    QuickShiftKind.POMERIGGIO -> "Pom"
+                    QuickShiftKind.SERA -> "Sera"
+                    QuickShiftKind.SERA2 -> "Sera2"
+                    else -> kind.label
+                }
+            } else kind.label
+
             Text(
-                resolution.compactCode,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                title,
+                style = if (performanceType == PerformanceType.DOPPIO)
+                    MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelMedium,
+                fontWeight = if (performanceType == PerformanceType.DOPPIO) FontWeight.Bold else FontWeight.Normal,
+                textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(3.dp))
+            if (performanceType != PerformanceType.DOPPIO) {
+                Text(
+                    resolution.compactCode,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+            }
             Text(
                 rule?.let {
                     val amount = moneyQuick(it.value)
                     if (performanceType == PerformanceType.DOPPIO) "+$amount" else amount
                 } ?: "non disponibile",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = if (performanceType == PerformanceType.DOPPIO)
+                    MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall,
+                fontWeight = if (performanceType == PerformanceType.DOPPIO) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
         }
