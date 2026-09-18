@@ -52,6 +52,28 @@ internal fun consistencyWarnings(
     }
 }
 
+internal fun displayShiftLabel(row: ShiftWithPay): String {
+    val absence = row.selectedRules.firstOrNull {
+        it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" || it.code == "ALT_IMA"
+    }
+    if (absence != null) return absence.name
+
+    return mainAllowanceName(row) ?: performanceLabel(row.shift.performanceType)
+}
+
+internal fun displayShiftExtras(row: ShiftWithPay): List<String> {
+    val absence = row.selectedRules.firstOrNull {
+        it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" || it.code == "ALT_IMA"
+    }
+    if (absence != null) return emptyList()
+
+    val mainName = mainAllowanceName(row)
+    return row.selectedRules
+        .filterNot { it.name == mainName }
+        .map { it.name }
+        .distinct()
+}
+
 internal fun calendarShiftCode(row: ShiftWithPay): String = when (row.shift.performanceType) {
     PerformanceType.DOPPIO -> "2×"
     PerformanceType.MEZZO_DOPPIO -> "½×"
