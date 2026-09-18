@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -69,15 +70,15 @@ internal fun StatisticsCard(
             Text("Statistiche", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                StatValue("Turni", turni.toString())
-                StatValue("Doppi", doppi.toString())
-                StatValue("½ Doppi", mezziDoppi.toString())
-                StatValue("Avviam.", avviamenti.toString())
+                StatValue("Turni", turni.toString(), Modifier.weight(1f))
+                StatValue("Doppi", doppi.toString(), Modifier.weight(1f))
+                StatValue("½ Doppi", mezziDoppi.toString(), Modifier.weight(1f))
+                StatValue("Avviam.", avviamenti.toString(), Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                StatValue("Ferie", ferie.toString())
-                StatValue("Malattia", malattia.toString())
-                StatValue("Indennità", money(monthRows.sumOf { it.pay.allowancesCents }))
+                StatValue("Ferie", ferie.toString(), Modifier.weight(1f))
+                StatValue("Malattia", malattia.toString(), Modifier.weight(1f))
+                StatValue("Indennità", money(monthRows.sumOf { it.pay.allowancesCents }), Modifier.weight(1f))
             }
 
             if (topRules.isNotEmpty()) {
@@ -105,8 +106,8 @@ internal fun StatisticsCard(
 }
 
 @Composable
-private fun StatValue(label: String, value: String) {
-    Column {
+private fun StatValue(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
         Text(value, fontWeight = FontWeight.Bold)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
