@@ -484,10 +484,13 @@ internal fun ShiftEditorScreen(
                             }
                             Spacer(Modifier.height(10.dp))
                             InfoPanel(
-                                if (isGiornaliero) {
-                                    "Base fissa € 90,00. Polivalenza automatica. Con ONMezzo la base diventa € 45,00 e viene aggiunta automaticamente Mezza IMA."
-                                } else {
-                                    performanceInfo(worker, performanceType)
+                                when {
+                                    isGiornaliero ->
+                                        "Base fissa € 90,00. Polivalenza automatica. Con ONMezzo la base diventa € 45,00 e viene aggiunta automaticamente Mezza IMA."
+                                    performanceType == PerformanceType.DOPPIO &&
+                                        quickKind == QuickShiftKind.GIORNALIERO ->
+                                        "Mezzo Giornaliero: base fissa € 45,00. Non riceve Mezza IMA né Polivalenza; Area, Disagi, Avviamento e Altre Voci restano disponibili."
+                                    else -> performanceInfo(worker, performanceType)
                                 }
                             )
                         }
