@@ -305,66 +305,32 @@ internal fun CalendarDay(
     onClick: () -> Unit
 ) {
     val today = date == LocalDate.now()
-    val shape = RoundedCornerShape(10.dp)
-    val visibleRows = dayRows.sortedBy { it.shift.startEpochMillis }.take(2)
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .padding(horizontal = 2.dp)
-            .then(
-                if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
-                else Modifier
-            )
-            .clickable(onClick = onClick),
-        shape = shape,
-        color = if (today) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                date.dayOfMonth.toString(),
-                modifier = Modifier.padding(top = 3.dp),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (selected || today) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-            )
-
-            if (visibleRows.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 3.dp, vertical = 3.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    visibleRows.forEach { row ->
-                        val code = calendarDisplayCode(row)
-                        val accent = calendarAccentColor(code)
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(16.dp),
-                            shape = RoundedCornerShape(5.dp),
-                            color = accent.copy(alpha = 0.20f)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    code,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = accent
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                Spacer(Modifier.height(3.dp))
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            modifier = Modifier.size(28.dp).clickable(onClick = onClick),
+            shape = CircleShape,
+            color = when {
+                selected -> MaterialTheme.colorScheme.primary
+                today -> MaterialTheme.colorScheme.primaryContainer
+                else -> Color.Transparent
             }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (selected || today) FontWeight.Bold else FontWeight.Normal,
+                    color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+        if (dayRows.isNotEmpty()) {
+            Text(
+                dayRows.take(2).joinToString(" ") { calendarShiftCode(it) },
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -458,147 +424,6 @@ internal fun ShiftCompactCard(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-        }
-    }
-}
-
-internal fun calendarAccentColor(code: String): Color = when (code.removePrefix("½")) {
-    "M" -> Color(0xFF159A80)
-    "P" -> Color(0xFF3F7FE8)
-    "S" -> Color(0xFFD99A00)
-    "S2" -> Color(0xFF7357D9)
-    "N" -> Color(0xFFD95C69)
-    "Ff" -> Color(0xFFD9657A)
-    "Mm" -> Color(0xFF159A80)
-    "Ds" -> Color(0xFFE17932)
-    "PC" -> Color(0xFF7357D9)
-    "II" -> Color(0xFF607D9B)
-    else -> PortBlue
-}
-
-@Composable
-internal fun DayDetailsCard(
-    rows: List<ShiftWithPay>,
-    onDetails: (ShiftWithPay) -> Unit,
-    onEdit: (ShiftWithPay) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            rows.forEachIndexed { index, row ->
-                ShiftDaySection(
-                    row = row,
-                    onDetails = { onDetails(row) },
-                    onEdit = { onEdit(row) }
-                )
-                if (index < rows.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                Modifier.fillMaxWidth().padding(top = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Totale giornata", fontWeight = FontWeight.SemiBold)
-                Text(
-                    money(rows.sumOf { it.pay.totalPayCents }),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ShiftDaySection(
-    row: ShiftWithPay,
-    onDetails: () -> Unit,
-    onEdit: () -> Unit
-) {
-    val code = calendarDisplayCode(row)
-    val accent = calendarAccentColor(code)
-    val mainRuleIds = row.selectedRules
-        .filter {
-            it.category == AllowanceCategory.TURNO ||
-                it.category == AllowanceCategory.DOPPIO ||
-                it.category == AllowanceCategory.MEZZO_TURNO
-        }
-        .map { it.id }
-        .toSet()
-    val allowanceLines = row.pay.allowanceLines.filterNot { it.ruleId in mainRuleIds }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = accent.copy(alpha = 0.16f)
-        ) {
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    calendarDisplayLabel(row),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = accent.copy(alpha = 0.22f)
-                ) {
-                    Text(
-                        code,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = accent
-                    )
-                }
-            }
-        }
-
-        if (allowanceLines.isEmpty()) {
-            Text(
-                "Nessuna indennità aggiuntiva",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            allowanceLines.forEach { line ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(line.name, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (line.amountCents >= 0) "+ ${money(line.amountCents)}" else money(line.amountCents),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = onDetails) { Text("Dettagli") }
-            TextButton(onClick = onEdit) { Text("Modifica") }
         }
     }
 }
