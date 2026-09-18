@@ -689,15 +689,15 @@ private fun ShiftEditorScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
-    val uiPrefs = remember(context) { context.getSharedPreferences("portshift_ui", 0) }
     val featureStore = remember(context) { AppFeatureStore(context) }
-    var quickMode by remember(initialShift?.id) { mutableStateOf(uiPrefs.getBoolean("quick_shift_mode", true)) }
     var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
         mutableStateOf(inferQuickShiftKind(initialSelectedIds, rules))
     }
     val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
     val specialOverrideClass = featureStore.specialDay(editorDate)?.dayClass?.toPortDayClass()
-    val effectiveQuickMode = quickMode && performanceType == PerformanceType.TURNO
+    // Il Turno ordinario usa sempre l'inserimento rapido; Doppio e Mezzo Doppio
+    // mantengono i dettagli di data/orario perché non fanno parte dei turni rapidi.
+    val effectiveQuickMode = performanceType == PerformanceType.TURNO
     val calculator = remember { AllowanceCalculator() }
 
     val manualRules = rules.filter {
@@ -911,26 +911,6 @@ private fun ShiftEditorScreen(
                         }
                     }
 
-                    item {
-                        EntryModeSelector(
-                            quickMode = effectiveQuickMode,
-                            quickEnabled = performanceType == PerformanceType.TURNO,
-                            onQuick = {
-                                quickMode = true
-                                uiPrefs.edit().putBoolean("quick_shift_mode", true).apply()
-                                val inferred = inferQuickShiftKind(selectedIds, rules)
-                                if (inferred != null) quickKind = inferred
-                                quickKind?.let { kind ->
-                                    selectedIds = applyQuickTurnSelection(selectedIds, rules, kind, editorDate, specialOverrideClass)
-                                }
-                            },
-                            onDetailed = {
-                                quickMode = false
-                                uiPrefs.edit().putBoolean("quick_shift_mode", false).apply()
-                            }
-                        )
-                    }
-
                     if (effectiveQuickMode) {
                         item {
                             QuickShiftPanel(
@@ -1000,7 +980,7 @@ private fun ShiftEditorScreen(
                                             )
                                             startText = newStart.format(editFormatter)
                                             endText = newStart.plus(duration).format(editFormatter)
-                                            if (quickMode && performanceType == PerformanceType.TURNO) {
+                                            if (performanceType == PerformanceType.TURNO) {
                                                 quickKind?.let { kind ->
                                                     val newDate = newStart.toLocalDate()
                                                     val override = featureStore.specialDay(newDate)?.dayClass?.toPortDayClass()
@@ -2143,11 +2123,37 @@ private fun toggleRule(
     allRules: List<AllowanceRuleEntity>,
     checked: Boolean
 ): Set<Long> {
-    if (!checked) return current - rule.id
+    val halfTurnCodes = setOf("DOP_TU_MEZZO", "DOP_ON_MEZZO")
+    val mezzaImaId = allRules.firstOrNull {
+        it.code == "ALT_MEZZA_IMA" &&
+            it.enabled &&
+            (it.performanceMask and PerformanceType.TURNO.maskBit) != 0
+    }?.id
+
+    if (!checked) {
+        val withoutRule = current - rule.id
+        return if (rule.code in halfTurnCodes && mezzaImaId != null) {
+            withoutRule - mezzaImaId
+        } else {
+            withoutRule
+        }
+    }
+
     val group = rule.exclusiveGroup
-    if (group.isNullOrBlank()) return current + rule.id
-    val groupIds = allRules.filter { it.exclusiveGroup == group }.map { it.id }.toSet()
-    return (current - groupIds) + rule.id
+    val withRule = if (group.isNullOrBlank()) {
+        current + rule.id
+    } else {
+        val groupIds = allRules.filter { it.exclusiveGroup == group }.map { it.id }.toSet()
+        (current - groupIds) + rule.id
+    }
+
+    // TUMezzo e ONmezzo implicano sempre Mezza IMA: l'utente non deve
+    // selezionarla manualmente ogni volta.
+    return if (rule.code in halfTurnCodes && mezzaImaId != null) {
+        withRule + mezzaImaId
+    } else {
+        withRule
+    }
 }
 
 private fun categoriesForPerformance(type: PerformanceType): List<AllowanceCategory> = when (type) {
