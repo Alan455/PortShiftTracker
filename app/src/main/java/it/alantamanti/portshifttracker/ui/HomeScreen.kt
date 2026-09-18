@@ -112,7 +112,7 @@ internal fun HomeScreen(repository: PortRepository) {
     var editorDate by remember { mutableStateOf<LocalDate?>(null) }
     var editingRow by remember { mutableStateOf<ShiftWithPay?>(null) }
     var detailRow by remember { mutableStateOf<ShiftWithPay?>(null) }
-    var copyDraft by remember { mutableStateOf<Pair<ShiftWithPay, ShiftEntity>?>(null) }
+    var copyDraft by remember { mutableStateOf<Triple<ShiftWithPay, ShiftEntity, Set<Long>>?>(null) }
     var pendingLockedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val zone = remember { ZoneId.of("Europe/Rome") }
@@ -153,7 +153,15 @@ internal fun HomeScreen(repository: PortRepository) {
             { _, year, monthValue, day ->
                 val target = LocalDate.of(year, monthValue + 1, day)
                 runWithMonthConfirmation(target) {
-                    copyDraft = row to copyShiftToDate(row.shift, target)
+                    val overrideClass = specialDays.firstOrNull { it.epochDay == target.toEpochDay() }
+                        ?.dayClass?.toPortDayClass()
+                    val copiedIds = repeatSelectionForDate(
+                        source = row,
+                        rules = rules,
+                        targetDate = target,
+                        overrideClass = overrideClass
+                    ).first
+                    copyDraft = Triple(row, copyShiftToDate(row.shift, target), copiedIds)
                     detailRow = null
                 }
             },
@@ -338,13 +346,13 @@ internal fun HomeScreen(repository: PortRepository) {
         )
     }
 
-    copyDraft?.let { (source, copiedShift) ->
+    copyDraft?.let { (source, copiedShift, copiedIds) ->
         ShiftEditorScreen(
             worker = source.worker,
             rules = rules,
             initialDate = rowDate(source),
             initialShift = copiedShift,
-            initialSelectedIds = source.selectedRules.map { it.id }.toSet(),
+            initialSelectedIds = copiedIds,
             isCopy = true,
             historyRows = historyRows,
             specialDays = specialDays,
