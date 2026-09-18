@@ -44,7 +44,8 @@ data class PayslipComparison(
     val disagioCents: Long? = null,
     val areaCents: Long? = null,
     val doppioCents: Long? = null,
-    val altreCents: Long? = null
+    val altreCents: Long? = null,
+    val locked: Boolean = false
 )
 
 private val Context.portShiftFeatureDataStore by preferencesDataStore(
@@ -191,7 +192,8 @@ class AppFeatureStore(context: Context) {
                 disagioCents = obj.optNullableLong("disagioCents"),
                 areaCents = obj.optNullableLong("areaCents"),
                 doppioCents = obj.optNullableLong("doppioCents"),
-                altreCents = obj.optNullableLong("altreCents")
+                altreCents = obj.optNullableLong("altreCents"),
+                locked = obj.optBoolean("locked", false)
             )
         }
 
@@ -216,6 +218,7 @@ class AppFeatureStore(context: Context) {
         .putNullable("areaCents", areaCents)
         .putNullable("doppioCents", doppioCents)
         .putNullable("altreCents", altreCents)
+        .put("locked", locked)
 
     private fun JSONObject.putNullable(key: String, value: Long?): JSONObject = apply {
         if (value == null) put(key, JSONObject.NULL) else put(key, value)
