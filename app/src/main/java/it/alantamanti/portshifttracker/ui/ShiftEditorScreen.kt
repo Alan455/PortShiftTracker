@@ -245,28 +245,9 @@ internal fun ShiftEditorScreen(
                         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        selectedSummary,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    preview?.let {
-                                        Text(
-                                            "Base ${money(it.basePayCents)}  •  Indennità ${money(it.allowancesCents)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            payFormula(it),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
                                 Text(
                                     preview?.let { money(it.totalPayCents) } ?: "—",
                                     style = MaterialTheme.typography.headlineSmall,
@@ -495,30 +476,28 @@ internal fun ShiftEditorScreen(
                                 shape = RoundedCornerShape(16.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
                             ) {
-                                Row(
+                                Column(
                                     Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Column {
-                                        Text("Totale provvisorio", style = MaterialTheme.typography.labelMedium)
-                                        Text(
-                                            selectedSummary,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            payFormula(pay),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
                                     Text(
-                                        money(pay.totalPayCents),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
+                                        "Totale provvisorio",
+                                        style = MaterialTheme.typography.labelMedium
                                     )
+                                    PreviewBreakdownRow(
+                                        label = "Base",
+                                        cents = pay.basePayCents,
+                                        signed = false
+                                    )
+                                    pay.allowanceLines
+                                        .filter { it.amountCents != 0L }
+                                        .forEach { line ->
+                                            PreviewBreakdownRow(
+                                                label = line.name,
+                                                cents = line.amountCents,
+                                                signed = true
+                                            )
+                                        }
                                 }
                             }
                         }
@@ -855,3 +834,37 @@ internal fun ShiftEditorScreen(
     }
 }
 
+
+
+@Composable
+private fun PreviewBreakdownRow(
+    label: String,
+    cents: Long,
+    signed: Boolean
+) {
+    val amount = when {
+        !signed -> money(cents)
+        cents >= 0L -> "+ ${money(cents)}"
+        else -> "− ${money(-cents)}"
+    }
+
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            amount,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
