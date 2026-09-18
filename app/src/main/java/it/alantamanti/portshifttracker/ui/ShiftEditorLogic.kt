@@ -1,6 +1,7 @@
 package it.alantamanti.portshifttracker.ui
 
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
+import it.alantamanti.portshifttracker.data.local.ShiftEntity
 import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
 import it.alantamanti.portshifttracker.data.repository.normalizeSelectedRuleIds
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
@@ -183,4 +184,18 @@ internal fun repeatSelectionForDate(
         performanceType = type
     )
     return normalizeSelectedRuleIds(type, reapplied, rules) to kind
+}
+
+
+internal fun copyShiftToDate(shift: ShiftEntity, targetDate: LocalDate): ShiftEntity {
+    val zone = ZoneId.of(shift.zoneId)
+    val originalStart = Instant.ofEpochMilli(shift.startEpochMillis).atZone(zone)
+    val durationMillis = shift.endEpochMillis - shift.startEpochMillis
+    val newStart = targetDate.atTime(originalStart.toLocalTime()).atZone(zone).toInstant().toEpochMilli()
+    return shift.copy(
+        id = 0,
+        startEpochMillis = newStart,
+        endEpochMillis = newStart + durationMillis,
+        serviceEpochDay = targetDate.toEpochDay()
+    )
 }
