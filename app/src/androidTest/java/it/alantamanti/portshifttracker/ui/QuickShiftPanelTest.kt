@@ -1,15 +1,15 @@
 package it.alantamanti.portshifttracker.ui
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.domain.AllowanceApplicationMode
 import it.alantamanti.portshifttracker.domain.AllowanceCalculationType
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.PerformanceType
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.time.LocalDate
@@ -33,11 +33,11 @@ class QuickShiftPanelTest {
             }
         }
 
-        compose.onNodeWithText("Pom").assertExists()
-        compose.onNodeWithText("Sera").assertExists()
-        compose.onNodeWithText("Sera2").assertExists()
-        compose.onNodeWithText("Mattina").assertDoesNotExist()
-        compose.onNodeWithText("Notte").assertDoesNotExist()
+        compose.onNodeWithText("Pom").fetchSemanticsNode()
+        compose.onNodeWithText("Sera").fetchSemanticsNode()
+        compose.onNodeWithText("Sera2").fetchSemanticsNode()
+        assertTrue(compose.onAllNodesWithText("Mattina").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("Notte").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -56,7 +56,7 @@ class QuickShiftPanelTest {
             }
         }
 
-        compose.onNodeWithText("Voce storica: G").assertExists()
+        compose.onNodeWithText("Voce storica: G").fetchSemanticsNode()
     }
 
     private fun doppioRules() = listOf(
