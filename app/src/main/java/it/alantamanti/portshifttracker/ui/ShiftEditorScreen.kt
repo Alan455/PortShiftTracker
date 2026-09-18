@@ -93,6 +93,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToLong
 
+private enum class EditorPerformanceChoice {
+    TURNO,
+    GIORNALIERO,
+    DOPPIO,
+    MEZZO_DOPPIO
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ShiftEditorScreen(
@@ -137,6 +144,8 @@ internal fun ShiftEditorScreen(
             )
         )
     }
+    val isGiornaliero = performanceType == PerformanceType.TURNO &&
+        quickKind == QuickShiftKind.GIORNALIERO
     val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
     val specialOverrideClass = specialDays.firstOrNull { it.epochDay == editorDate.toEpochDay() }
         ?.dayClass?.toPortDayClass()
@@ -327,61 +336,160 @@ internal fun ShiftEditorScreen(
                 ) {
                     item {
                         EditorSectionCard(title = "1. Tipo di prestazione") {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                PerformanceType.entries.forEach { type ->
-                                    val selected = performanceType == type
-                                    val shape = RoundedCornerShape(14.dp)
-                                    Surface(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = 74.dp)
-                                            .border(
-                                                width = if (selected) 2.dp else 1.dp,
-                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                                shape = shape
-                                            )
-                                            .clickable {
-                                                performanceType = type
-                                                val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
-                                                    rules.firstOrNull { it.id == id }
-                                                        ?.let { (it.performanceMask and type.maskBit) != 0 } == true
-                                                }
-                                                selectedIds = normalizeSelectedRuleIds(type, compatibleIds, rules)
-                                                quickKind = inferQuickShiftKind(selectedIds, rules, type)
-                                            },
-                                        shape = shape,
-                                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                                    ) {
-                                        Column(
-                                            Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                                        ) {
-                                            Text(
-                                                when (type) {
-                                                    PerformanceType.TURNO -> "T"
-                                                    PerformanceType.DOPPIO -> "2×"
-                                                    PerformanceType.MEZZO_DOPPIO -> "½×"
+                            val choices = listOf(
+                                EditorPerformanceChoice.TURNO,
+                                EditorPerformanceChoice.GIORNALIERO,
+                                EditorPerformanceChoice.DOPPIO,
+                                EditorPerformanceChoice.MEZZO_DOPPIO
+                            )
+                            choices.chunked(2).forEachIndexed { rowIndex, rowChoices ->
+                                if (rowIndex > 0) Spacer(Modifier.height(8.dp))
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowChoices.forEach { choice ->
+                                        val selected = when (choice) {
+                                            EditorPerformanceChoice.TURNO ->
+                                                performanceType == PerformanceType.TURNO && !isGiornaliero
+                                            EditorPerformanceChoice.GIORNALIERO -> isGiornaliero
+                                            EditorPerformanceChoice.DOPPIO ->
+                                                performanceType == PerformanceType.DOPPIO
+                                            EditorPerformanceChoice.MEZZO_DOPPIO ->
+                                                performanceType == PerformanceType.MEZZO_DOPPIO
+                                        }
+                                        val shape = RoundedCornerShape(14.dp)
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 74.dp)
+                                                .border(
+                                                    width = if (selected) 2.dp else 1.dp,
+                                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                                    shape = shape
+                                                )
+                                                .clickable {
+                                                    when (choice) {
+                                                        EditorPerformanceChoice.TURNO -> {
+                                                            performanceType = PerformanceType.TURNO
+                                                            val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
+                                                                rules.firstOrNull { it.id == id }?.let { rule ->
+                                                                    (rule.performanceMask and PerformanceType.TURNO.maskBit) != 0 &&
+                                                                        rule.code != "G"
+                                                                } == true
+                                                            }
+                                                            selectedIds = normalizeSelectedRuleIds(
+                                                                PerformanceType.TURNO,
+                                                                compatibleIds,
+                                                                rules
+                                                            )
+                                                            quickKind = inferQuickShiftKind(
+                                                                selectedIds,
+                                                                rules,
+                                                                PerformanceType.TURNO
+                                                            )
+                                                        }
+                                                        EditorPerformanceChoice.GIORNALIERO -> {
+                                                            performanceType = PerformanceType.TURNO
+                                                            val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
+                                                                rules.firstOrNull { it.id == id }?.let { rule ->
+                                                                    (rule.performanceMask and PerformanceType.TURNO.maskBit) != 0 &&
+                                                                        rule.code != "DOP_TU_MEZZO"
+                                                                } == true
+                                                            }
+                                                            selectedIds = normalizeSelectedRuleIds(
+                                                                PerformanceType.TURNO,
+                                                                applyQuickTurnSelection(
+                                                                    currentIds = compatibleIds,
+                                                                    rules = rules,
+                                                                    kind = QuickShiftKind.GIORNALIERO,
+                                                                    date = editorDate,
+                                                                    overrideClass = specialOverrideClass,
+                                                                    performanceType = PerformanceType.TURNO
+                                                                ),
+                                                                rules
+                                                            )
+                                                            quickKind = QuickShiftKind.GIORNALIERO
+                                                        }
+                                                        EditorPerformanceChoice.DOPPIO -> {
+                                                            performanceType = PerformanceType.DOPPIO
+                                                            val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
+                                                                rules.firstOrNull { it.id == id }
+                                                                    ?.let { (it.performanceMask and PerformanceType.DOPPIO.maskBit) != 0 } == true
+                                                            }
+                                                            selectedIds = normalizeSelectedRuleIds(
+                                                                PerformanceType.DOPPIO,
+                                                                compatibleIds,
+                                                                rules
+                                                            )
+                                                            quickKind = inferQuickShiftKind(
+                                                                selectedIds,
+                                                                rules,
+                                                                PerformanceType.DOPPIO
+                                                            )
+                                                        }
+                                                        EditorPerformanceChoice.MEZZO_DOPPIO -> {
+                                                            performanceType = PerformanceType.MEZZO_DOPPIO
+                                                            val compatibleIds = selectedIds.filterTo(mutableSetOf()) { id ->
+                                                                rules.firstOrNull { it.id == id }
+                                                                    ?.let { (it.performanceMask and PerformanceType.MEZZO_DOPPIO.maskBit) != 0 } == true
+                                                            }
+                                                            selectedIds = normalizeSelectedRuleIds(
+                                                                PerformanceType.MEZZO_DOPPIO,
+                                                                compatibleIds,
+                                                                rules
+                                                            )
+                                                            quickKind = inferQuickShiftKind(
+                                                                selectedIds,
+                                                                rules,
+                                                                PerformanceType.MEZZO_DOPPIO
+                                                            )
+                                                        }
+                                                    }
                                                 },
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                performanceLabel(type),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                                textAlign = TextAlign.Center
-                                            )
+                                            shape = shape,
+                                            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                        ) {
+                                            Column(
+                                                Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Text(
+                                                    when (choice) {
+                                                        EditorPerformanceChoice.TURNO -> "T"
+                                                        EditorPerformanceChoice.GIORNALIERO -> "G"
+                                                        EditorPerformanceChoice.DOPPIO -> "2×"
+                                                        EditorPerformanceChoice.MEZZO_DOPPIO -> "½×"
+                                                    },
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    when (choice) {
+                                                        EditorPerformanceChoice.TURNO -> "Turno"
+                                                        EditorPerformanceChoice.GIORNALIERO -> "Giornaliero"
+                                                        EditorPerformanceChoice.DOPPIO -> "Doppio"
+                                                        EditorPerformanceChoice.MEZZO_DOPPIO -> "Mezzo Doppio"
+                                                    },
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                             Spacer(Modifier.height(10.dp))
-                            InfoPanel(performanceInfo(worker, performanceType))
+                            InfoPanel(
+                                if (isGiornaliero) {
+                                    "Base fissa € 90,00. Polivalenza automatica. Con ONMezzo la base diventa € 45,00 e viene aggiunta automaticamente Mezza IMA."
+                                } else {
+                                    performanceInfo(worker, performanceType)
+                                }
+                            )
                         }
                     }
 
@@ -441,7 +549,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (effectiveQuickMode) {
+                    if (effectiveQuickMode && !isGiornaliero) {
                         item {
                             QuickShiftPanel(
                                 date = editorDate,
@@ -706,7 +814,13 @@ internal fun ShiftEditorScreen(
                                 )
                         }
                         .forEach { category ->
-                        val categoryRules = manualRules.filter { it.category == category }
+                        val categoryRules = manualRules
+                            .filter { it.category == category }
+                            .filterNot { rule ->
+                                isGiornaliero &&
+                                    category == AllowanceCategory.MEZZO_TURNO &&
+                                    rule.code != "DOP_ON_MEZZO"
+                            }
                         if (categoryRules.isNotEmpty()) {
                             item {
                                 AllowanceCategoryCard(
