@@ -65,6 +65,10 @@ internal fun displayShiftLabel(row: ShiftWithPay): String {
     val absence = row.selectedRules.firstOrNull { it.code in primaryAbsenceCodes }
     if (absence != null) return absence.name
 
+    val codes = row.selectedRules.map { it.code }.toSet()
+    if ("G" in codes && "DOP_ON_MEZZO" in codes) return "Mezzo Giornaliero"
+    if ("DOP_G" in codes) return "Mezzo Giornaliero"
+
     return mainAllowanceName(row) ?: performanceLabel(row.shift.performanceType)
 }
 
@@ -100,7 +104,7 @@ internal fun calendarShiftCode(row: ShiftWithPay): String = when (row.shift.perf
                     "SERA", "SERAS", "SERAF" -> "S"
                     "SERA2", "SERAS2", "SERAF2" -> "S2"
                     "NOTTE", "NOTTEF" -> "N"
-                    "G" -> "G"
+                    "G" -> if ("DOP_ON_MEZZO" in selectedCodes) "½G" else "G"
                     else -> if (row.selectedRules.any { it.category == AllowanceCategory.MEZZO_TURNO }) "½T" else "T"
                 }
             }
