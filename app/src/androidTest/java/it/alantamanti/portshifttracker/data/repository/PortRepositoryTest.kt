@@ -67,9 +67,11 @@ class PortRepositoryTest {
     }
 
     @Test
-    fun same_performance_same_day_is_rejected() = runBlocking {
+    fun same_performance_same_day_is_rejected() {
         val date = LocalDate.of(2026, 9, 18)
-        repository.addShiftWithSelections(shift(date, PerformanceType.TURNO), setOf(1))
+        runBlocking {
+            repository.addShiftWithSelections(shift(date, PerformanceType.TURNO), setOf(1))
+        }
 
         assertThrows(DuplicatePerformanceException::class.java) {
             runBlocking {
@@ -88,11 +90,13 @@ class PortRepositoryTest {
     }
 
     @Test
-    fun range_save_rolls_back_completely_when_one_day_conflicts() = runBlocking {
+    fun range_save_rolls_back_completely_when_one_day_conflicts() {
         val first = LocalDate.of(2026, 9, 18)
         val second = first.plusDays(1)
 
-        repository.addShiftWithSelections(shift(second, PerformanceType.TURNO), setOf(1))
+        runBlocking {
+            repository.addShiftWithSelections(shift(second, PerformanceType.TURNO), setOf(1))
+        }
 
         assertThrows(DuplicatePerformanceException::class.java) {
             runBlocking {
@@ -107,7 +111,7 @@ class PortRepositoryTest {
         }
 
         // Rimane soltanto il record preesistente: il primo giorno del range è rollbackato.
-        assertEquals(1, db.shiftDao().getAll().size)
+        assertEquals(1, runBlocking { db.shiftDao().getAll().size })
     }
 
     private fun shift(date: LocalDate, type: PerformanceType): ShiftEntity {
