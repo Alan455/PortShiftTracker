@@ -98,6 +98,41 @@ class PortShiftApplication : Application() {
                 "WHERE code IN ('DOP_TU_MEZZO','DOP_ON_MEZZO')"
         )
 
+        // Giornaliero: base fissa €90 sul primo turno. Con ONMezzo il motore usa il 50%.
+        // Nel Doppio la voce DOP_G rappresenta invece il solo Mezzo Giornaliero da €45.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET name = 'Giornaliero', value = 9000, " +
+                "category = 'TURNO', exclusiveGroup = 'TIPO_TURNO', " +
+                "basePayEffect = 'REPLACE_BASE', performanceMask = 1, enabled = 1 " +
+                "WHERE code = 'G'"
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET name = 'Mezzo Giornaliero', value = 4500, " +
+                "category = 'DOPPIO', exclusiveGroup = 'DOPPIO', " +
+                "basePayEffect = 'REPLACE_BASE', performanceMask = 2, enabled = 1 " +
+                "WHERE code = 'DOP_G'"
+        )
+
+        // Converte la vecchia voce Giornaliero da €87 nel nuovo Giornaliero strutturale da €90.
+        db.openHelper.writableDatabase.execSQL(
+            """
+            INSERT OR IGNORE INTO shift_allowance_selections (shiftId, ruleId)
+            SELECT sas.shiftId, target.id
+            FROM shift_allowance_selections sas
+            JOIN allowance_rules legacy ON legacy.id = sas.ruleId
+            JOIN allowance_rules target ON target.code = 'G'
+            WHERE legacy.code = 'ALT_GIORNALIERO_87'
+            """.trimIndent()
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "DELETE FROM shift_allowance_selections WHERE ruleId IN (" +
+                "SELECT id FROM allowance_rules WHERE code = 'ALT_GIORNALIERO_87')"
+        )
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET enabled = 0, name = 'Giornaliero (legacy)' " +
+                "WHERE code = 'ALT_GIORNALIERO_87'"
+        )
+
         // Normalizza gradualmente i record legacy. In presenza di vecchi duplicati,
         // il record conflittuale resta null per preservare lo storico.
         db.shiftDao().getWithoutServiceDay().forEach { shift ->
