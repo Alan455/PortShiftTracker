@@ -33,7 +33,11 @@ data class WorkerEntity(
         childColumns = ["workerId"],
         onDelete = ForeignKey.CASCADE
     )],
-    indices = [Index("workerId"), Index("startEpochMillis")]
+    indices = [
+        Index("workerId"),
+        Index("startEpochMillis"),
+        Index(value = ["workerId", "serviceEpochDay", "performanceType"], unique = true)
+    ]
 )
 data class ShiftEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -43,6 +47,8 @@ data class ShiftEntity(
     val zoneId: String = "Europe/Rome",
     val role: String = "",
     val notes: String = "",
+    /** Giorno di servizio locale (epoch day). Null solo per eventuali record legacy non ancora normalizzati. */
+    val serviceEpochDay: Long? = null,
     /** Consente più prestazioni nello stesso giorno, es. TURNO + DOPPIO. */
     val performanceType: PerformanceType = PerformanceType.TURNO
 )
