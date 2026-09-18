@@ -188,21 +188,12 @@ internal fun HistoryScreen(repository: PortRepository) {
                             Text(money(row.pay.totalPayCents), fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            performanceLabel(row.shift.performanceType) +
-                                mainAllowanceName(row)?.let { " · $it" }.orEmpty(),
+                            displayShiftLabel(row),
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        if (row.shift.role.isNotBlank()) {
-                            Text(
-                                row.shift.role,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        val extras = row.selectedRules
-                            .filterNot { it.name == mainAllowanceName(row) }
+                        val extras = displayShiftExtras(row)
                             .take(5)
-                            .joinToString(" · ") { it.name }
+                            .joinToString(" · ")
                         if (extras.isNotBlank()) {
                             Text(
                                 extras,
