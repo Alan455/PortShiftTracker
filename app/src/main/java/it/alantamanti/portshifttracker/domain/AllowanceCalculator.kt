@@ -75,12 +75,23 @@ class AllowanceCalculator {
             .sortedBy { it.priority }
             .toList()
 
-        // Ferie, Malattia e IMA sono causali sostitutive del turno ordinario.
+        // Ferie, Malattia, IMA e Giornaliero possono sostituire la base ordinaria.
         val replacementRule = applicableRules
             .filter { it.basePayEffect == BasePayEffect.REPLACE_BASE }
             .minByOrNull { it.priority }
 
-        val basePay = replacementRule?.value ?: performanceBasePay
+        val giornalieroRule = applicableRules.firstOrNull { it.code == "G" }
+        val onMezzoSelected = applicableRules.any { it.code == "DOP_ON_MEZZO" }
+
+        // Giornaliero primo turno: base fissa €90. Con ONMezzo la base Giornaliero
+        // viene dimezzata a €45; Mezza IMA resta automatica perché è un TURNO.
+        // Nel Doppio, DOP_G è già una REPLACE_BASE da €45 e non riceve Mezza IMA/Polivalenza.
+        val basePay = when {
+            shift.performanceType == PerformanceType.TURNO &&
+                giornalieroRule != null &&
+                onMezzoSelected -> (giornalieroRule.value / 2.0).roundToLong()
+            else -> replacementRule?.value ?: performanceBasePay
+        }
 
         // Mezza IMA dimezza soltanto l'indennità del TURNO ordinario. Area e disagi restano interi.
         // Non è compatibile con Doppio/Mezzo Doppio tramite performanceMask.
