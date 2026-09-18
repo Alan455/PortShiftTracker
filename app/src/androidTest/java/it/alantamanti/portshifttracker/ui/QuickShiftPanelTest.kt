@@ -19,7 +19,7 @@ class QuickShiftPanelTest {
     val compose = createComposeRule()
 
     @Test
-    fun doppio_saturday_shows_only_three_choices_and_automatic_modifiers() {
+    fun doppio_saturday_shows_three_shift_choices_and_half_giornaliero() {
         compose.setContent {
             MaterialTheme {
                 QuickShiftPanel(
@@ -36,13 +36,14 @@ class QuickShiftPanelTest {
         compose.onNodeWithText("Pom").fetchSemanticsNode()
         compose.onNodeWithText("Sera").fetchSemanticsNode()
         compose.onNodeWithText("Sera2").fetchSemanticsNode()
+        compose.onNodeWithText("½ Giornaliero").fetchSemanticsNode()
         assertTrue(compose.onAllNodesWithText("Mattina").fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodesWithText("Notte").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
-    fun old_doppio_g_is_shown_as_historical_not_as_new_choice() {
-        val rules = doppioRules() + rule("DOP_G", "G", 5300)
+    fun half_giornaliero_is_an_active_doppio_choice_at_45_euro() {
+        val rules = doppioRules()
         compose.setContent {
             MaterialTheme {
                 QuickShiftPanel(
@@ -56,7 +57,9 @@ class QuickShiftPanelTest {
             }
         }
 
-        compose.onNodeWithText("Voce storica: G").fetchSemanticsNode()
+        compose.onNodeWithText("Selezionato: ½G").fetchSemanticsNode()
+        compose.onNodeWithText("Mezzo Giornaliero: base fissa €45, senza Mezza IMA e senza Polivalenza.")
+            .fetchSemanticsNode()
     }
 
     private fun doppioRules() = listOf(
@@ -68,7 +71,8 @@ class QuickShiftPanelTest {
         rule("DOP_SERAF", "SeraF", 5219),
         rule("DOP_SERA2", "Sera2", 1326),
         rule("DOP_SERAS2", "SeraS2", 2462),
-        rule("DOP_SERAF2", "SeraF2", 6119)
+        rule("DOP_SERAF2", "SeraF2", 6119),
+        rule("DOP_G", "Mezzo Giornaliero", 4500)
     )
 
     private fun rule(code: String, name: String, cents: Long) = AllowanceRuleEntity(
