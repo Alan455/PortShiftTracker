@@ -1,7 +1,13 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 android {
@@ -12,10 +18,31 @@ android {
         applicationId = "it.alantamanti.portshifttracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.11.0"
+        versionCode = 18
+        versionName = "0.12.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("PST_KEYSTORE_FILE")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = File(keystorePath)
+                storePassword = System.getenv("PST_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("PST_KEY_ALIAS")
+                keyPassword = System.getenv("PST_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            if (!System.getenv("PST_KEYSTORE_FILE").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {
@@ -51,6 +78,7 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
+    androidTestImplementation("androidx.room:room-testing:$roomVersion")
 
     testImplementation("junit:junit:4.13.2")
 }
