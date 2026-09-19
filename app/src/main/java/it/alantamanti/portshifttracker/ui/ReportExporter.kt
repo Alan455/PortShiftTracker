@@ -17,7 +17,6 @@ import java.util.zip.ZipOutputStream
 
 internal object ReportExporter {
     private val dateFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-    private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
     fun writeXlsx(context: Context, uri: Uri, month: YearMonth, rows: List<ShiftWithPay>) {
         context.contentResolver.openOutputStream(uri)?.use { out -> writeWorkbook(out, month, rows) }
@@ -40,12 +39,10 @@ internal object ReportExporter {
             canvas.drawText("PortShiftTracker - ${month.month.getDisplayName(java.time.format.TextStyle.FULL, Locale.ITALIAN)} ${month.year}", 32f, y, titlePaint)
             y += 26f
             canvas.drawText("Data", 32f, y, headerPaint)
-            canvas.drawText("Prestazione", 92f, y, headerPaint)
-            canvas.drawText("Turno", 185f, y, headerPaint)
-            canvas.drawText("Base", 270f, y, headerPaint)
-            canvas.drawText("Indennità", 330f, y, headerPaint)
-            canvas.drawText("Totale", 405f, y, headerPaint)
-            canvas.drawText("Mansione", 470f, y, headerPaint)
+            canvas.drawText("Turno", 112f, y, headerPaint)
+            canvas.drawText("Base", 290f, y, headerPaint)
+            canvas.drawText("Indennità", 355f, y, headerPaint)
+            canvas.drawText("Totale", 455f, y, headerPaint)
             y += 14f
         }
 
@@ -66,21 +63,19 @@ internal object ReportExporter {
                 it.category.name in setOf("TURNO", "DOPPIO", "MEZZO_TURNO")
             }?.name.orEmpty()
             canvas.drawText(start.toLocalDate().format(dateFmt), 32f, y, paint)
-            canvas.drawText(performanceText(row), 92f, y, paint)
-            canvas.drawText(turn.take(14), 185f, y, paint)
-            canvas.drawText(euroNumber(row.pay.basePayCents), 270f, y, paint)
-            canvas.drawText(euroNumber(row.pay.allowancesCents), 330f, y, paint)
-            canvas.drawText(euroNumber(row.pay.totalPayCents), 405f, y, paint)
-            canvas.drawText(row.shift.role.take(18), 470f, y, paint)
+            canvas.drawText(turn.take(27), 112f, y, paint)
+            canvas.drawText(euroNumber(row.pay.basePayCents), 290f, y, paint)
+            canvas.drawText(euroNumber(row.pay.allowancesCents), 355f, y, paint)
+            canvas.drawText(euroNumber(row.pay.totalPayCents), 455f, y, paint)
             y += 13f
             val detail = row.pay.allowanceLines.joinToString(" · ") { it.name }
             if (detail.isNotBlank()) {
-                canvas.drawText(detail.take(90), 92f, y, paint)
+                canvas.drawText(detail.take(95), 112f, y, paint)
                 y += 12f
             }
         }
         y += 8f
-        canvas.drawText("Totale mese: ${euroNumber(rows.sumOf { it.pay.totalPayCents })}", 330f, y, headerPaint)
+        canvas.drawText("Totale mese: ${euroNumber(rows.sumOf { it.pay.totalPayCents })}", 355f, y, headerPaint)
         doc.finishPage(page)
         context.contentResolver.openOutputStream(uri)?.use { doc.writeTo(it) }
             ?: error("Impossibile aprire il file PDF")
@@ -118,7 +113,7 @@ internal object ReportExporter {
     }
 
     private fun sheetXml(rows: List<ShiftWithPay>): String {
-        val headers = listOf("Data", "Prestazione", "Turno", "Ora", "Base €", "Indennità €", "Totale €", "Mansione", "Dettaglio voci")
+        val headers = listOf("Data", "Turno", "Base €", "Indennità €", "Totale €", "Dettaglio voci")
         val xml = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>")
         fun stringCell(col: Int, row: Int, value: String) = "<c r=\"${cellRef(col, row)}\" t=\"inlineStr\"><is><t>${xml(value)}</t></is></c>"
         fun numberCell(col: Int, row: Int, value: Double) = "<c r=\"${cellRef(col, row)}\"><v>${"%.2f".format(Locale.US, value)}</v></c>"
@@ -135,20 +130,17 @@ internal object ReportExporter {
             }?.name.orEmpty()
             xml.append("<row r=\"$r\">")
             xml.append(stringCell(0, r, start.toLocalDate().format(dateFmt)))
-            xml.append(stringCell(1, r, performanceText(row)))
-            xml.append(stringCell(2, r, turn))
-            xml.append(stringCell(3, r, start.format(timeFmt)))
-            xml.append(numberCell(4, r, row.pay.basePayCents / 100.0))
-            xml.append(numberCell(5, r, row.pay.allowancesCents / 100.0))
-            xml.append(numberCell(6, r, row.pay.totalPayCents / 100.0))
-            xml.append(stringCell(7, r, row.shift.role))
-            xml.append(stringCell(8, r, row.pay.allowanceLines.joinToString("; ") { "${it.name} ${euroNumber(it.amountCents)}" }))
+            xml.append(stringCell(1, r, turn))
+            xml.append(numberCell(2, r, row.pay.basePayCents / 100.0))
+            xml.append(numberCell(3, r, row.pay.allowancesCents / 100.0))
+            xml.append(numberCell(4, r, row.pay.totalPayCents / 100.0))
+            xml.append(stringCell(5, r, row.pay.allowanceLines.joinToString("; ") { "${it.name} ${euroNumber(it.amountCents)}" }))
             xml.append("</row>")
         }
         val totalRow = rows.size + 3
         xml.append("<row r=\"$totalRow\">")
-        xml.append(stringCell(5, totalRow, "Totale mese"))
-        xml.append(numberCell(6, totalRow, rows.sumOf { it.pay.totalPayCents } / 100.0))
+        xml.append(stringCell(3, totalRow, "Totale mese"))
+        xml.append(numberCell(4, totalRow, rows.sumOf { it.pay.totalPayCents } / 100.0))
         xml.append("</row></sheetData></worksheet>")
         return xml.toString()
     }
@@ -156,12 +148,6 @@ internal object ReportExporter {
     private fun start(row: ShiftWithPay): LocalDateTime = LocalDateTime.ofInstant(
         Instant.ofEpochMilli(row.shift.startEpochMillis), ZoneId.of(row.shift.zoneId)
     )
-
-    private fun performanceText(row: ShiftWithPay): String = when (row.shift.performanceType.name) {
-        "DOPPIO" -> "Doppio"
-        "MEZZO_DOPPIO" -> "Mezzo Doppio"
-        else -> "Turno"
-    }
 
     private fun euroNumber(cents: Long): String = "%.2f".format(Locale.ITALY, cents / 100.0)
 
