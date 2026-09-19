@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import it.alantamanti.portshifttracker.data.repository.PortRepository
-import it.alantamanti.portshifttracker.domain.PerformanceType
+import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
@@ -43,7 +43,7 @@ internal fun HistoryScreen(repository: PortRepository) {
     var startDate by remember { mutableStateOf(LocalDate.now().minusDays(90)) }
     var endDate by remember { mutableStateOf(LocalDate.now()) }
     var query by remember { mutableStateOf("") }
-    var typeFilter by remember { mutableStateOf<PerformanceType?>(null) }
+    var typeFilter by remember { mutableStateOf<HistoryCategory?>(null) }
 
     val startMillis = remember(startDate) {
         startDate.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -59,13 +59,15 @@ internal fun HistoryScreen(repository: PortRepository) {
     val filtered = remember(rows, query, typeFilter) {
         val needle = query.trim().lowercase(Locale.ITALIAN)
         rows.filter { row ->
-            val typeOk = typeFilter == null || row.shift.performanceType == typeFilter
+            val typeOk = typeFilter == null || historyCategory(row) == typeFilter
             val textOk = needle.isBlank() || buildString {
                 append(row.shift.role)
                 append(' ')
                 append(row.shift.notes)
                 append(' ')
                 append(performanceLabel(row.shift.performanceType))
+                append(' ')
+                append(historyCategory(row).label)
                 append(' ')
                 row.selectedRules.forEach {
                     append(it.name)
@@ -141,11 +143,11 @@ internal fun HistoryScreen(repository: PortRepository) {
                             onClick = { typeFilter = null },
                             label = { Text("Tutti") }
                         )
-                        PerformanceType.entries.forEach { type ->
+                        HistoryCategory.entries.forEach { category ->
                             FilterChip(
-                                selected = typeFilter == type,
-                                onClick = { typeFilter = type },
-                                label = { Text(performanceLabel(type)) }
+                                selected = typeFilter == category,
+                                onClick = { typeFilter = category },
+                                label = { Text(category.label) }
                             )
                         }
                     }
@@ -171,38 +173,65 @@ internal fun HistoryScreen(repository: PortRepository) {
                 )
             }
         } else {
-            items(filtered, key = { it.shift.id }) { row ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            // "Tutti" mostra cinque gruppi separati; il filtro mostra un solo gruppo.
+            // Ogni prestazione appartiene a una sola categoria e viene renderizzata una volta.
+            val groups = if (typeFilter == null) HistoryCategory.entries.toList()
+                else listOfNotNull(typeFilter)
+            groups.forEach { category ->
+                val categoryRows = filtered.filter { historyCategory(it) == category }
+                if (categoryRows.isNotEmpty()) {
+                    item(key = "heading_${category.name}") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             Text(
-                                italianTitle(rowDate(row).format(shortDayFormatter)),
-                                fontWeight = FontWeight.SemiBold
+                                "${category.label} (${categoryRows.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
-                            Text(money(row.pay.totalPayCents), fontWeight = FontWeight.Bold)
-                        }
-                        Text(
-                            displayShiftLabel(row),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        val extras = displayShiftExtras(row)
-                            .take(5)
-                            .joinToString(" · ")
-                        if (extras.isNotBlank()) {
                             Text(
-                                extras,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                money(categoryRows.sumOf { it.pay.totalPayCents }),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
+                    items(categoryRows, key = { it.shift.id }) { row ->
+                        HistoryEntryCard(row)
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryEntryCard(row: ShiftWithPay) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    italianTitle(rowDate(row).format(shortDayFormatter)),
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(money(row.pay.totalPayCents), fontWeight = FontWeight.Bold)
+            }
+            Text(displayShiftLabel(row), style = MaterialTheme.typography.bodyMedium)
+            val extras = displayShiftExtras(row).take(5).joinToString(" · ")
+            if (extras.isNotBlank()) {
+                Text(
+                    extras,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
