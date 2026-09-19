@@ -75,18 +75,15 @@ internal class BetaAccessManager(private val appContext: Context) {
     private var auth: FirebaseAuth? = null
     private var firestore: FirebaseFirestore? = null
     // Un risultato di una verifica iniziata prima della pausa non può riaprire l'app.
-    private var verificationVersion = 0L
-    private var isForeground = false
+    private val accessSession = ForegroundAccessSession()
 
     fun onForeground() {
-        isForeground = true
-        verificationVersion++
+        accessSession.resume()
         if (state is BetaAccessState.Granted) state = BetaAccessState.Checking
     }
 
     fun onBackground() {
-        isForeground = false
-        verificationVersion++
+        accessSession.pause()
         if (state is BetaAccessState.Granted) state = BetaAccessState.Checking
     }
 
@@ -130,8 +127,8 @@ internal class BetaAccessManager(private val appContext: Context) {
     }
 
     suspend fun refreshAccess() {
-        if (state is BetaAccessState.ConfigurationMissing || !isForeground) return
-        val requestVersion = ++verificationVersion
+        if (state is BetaAccessState.ConfigurationMissing) return
+        val requestVersion = accessSession.beginVerification() ?: return
         val currentAuth = auth ?: return
         val currentFirestore = firestore ?: return
 
@@ -159,7 +156,7 @@ internal class BetaAccessManager(private val appContext: Context) {
                 .get(Source.SERVER)
                 .awaitResult()
 
-            if (requestVersion != verificationVersion || !isForeground) return
+            if (!accessSession.isCurrent(requestVersion)) return
             state = if (snapshot.exists()) {
                 BetaAccessState.Granted(email)
             } else {
@@ -169,7 +166,7 @@ internal class BetaAccessManager(private val appContext: Context) {
                 )
             }
         } catch (error: FirebaseFirestoreException) {
-            if (requestVersion != verificationVersion || !isForeground) return
+            if (!accessSession.isCurrent(requestVersion)) return
             state = when (error.code) {
                 FirebaseFirestoreException.Code.PERMISSION_DENIED ->
                     BetaAccessState.Denied(
@@ -188,7 +185,7 @@ internal class BetaAccessManager(private val appContext: Context) {
                     )
             }
         } catch (_: Exception) {
-            if (requestVersion != verificationVersion || !isForeground) return
+            if (!accessSession.isCurrent(requestVersion)) return
             state = BetaAccessState.Error(
                 "Verifica dell'autorizzazione non riuscita. Riprova."
             )
@@ -240,7 +237,7 @@ internal class BetaAccessManager(private val appContext: Context) {
     }
 
     suspend fun signOut(context: Context) {
-        verificationVersion++
+        accessSession.invalidate()
         auth?.signOut()
         runCatching {
             CredentialManager.create(context)
