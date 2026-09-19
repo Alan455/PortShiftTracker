@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,6 +74,21 @@ internal class BetaAccessManager(private val appContext: Context) {
 
     private var auth: FirebaseAuth? = null
     private var firestore: FirebaseFirestore? = null
+    // Un risultato di una verifica iniziata prima della pausa non può riaprire l'app.
+    private var verificationVersion = 0L
+    private var isForeground = false
+
+    fun onForeground() {
+        isForeground = true
+        verificationVersion++
+        if (state is BetaAccessState.Granted) state = BetaAccessState.Checking
+    }
+
+    fun onBackground() {
+        isForeground = false
+        verificationVersion++
+        if (state is BetaAccessState.Granted) state = BetaAccessState.Checking
+    }
 
     init {
         configureFirebase()
@@ -111,7 +130,8 @@ internal class BetaAccessManager(private val appContext: Context) {
     }
 
     suspend fun refreshAccess() {
-        if (state is BetaAccessState.ConfigurationMissing) return
+        if (state is BetaAccessState.ConfigurationMissing || !isForeground) return
+        val requestVersion = ++verificationVersion
         val currentAuth = auth ?: return
         val currentFirestore = firestore ?: return
 
@@ -139,6 +159,7 @@ internal class BetaAccessManager(private val appContext: Context) {
                 .get(Source.SERVER)
                 .awaitResult()
 
+            if (requestVersion != verificationVersion || !isForeground) return
             state = if (snapshot.exists()) {
                 BetaAccessState.Granted(email)
             } else {
@@ -148,6 +169,7 @@ internal class BetaAccessManager(private val appContext: Context) {
                 )
             }
         } catch (error: FirebaseFirestoreException) {
+            if (requestVersion != verificationVersion || !isForeground) return
             state = when (error.code) {
                 FirebaseFirestoreException.Code.PERMISSION_DENIED ->
                     BetaAccessState.Denied(
@@ -166,6 +188,7 @@ internal class BetaAccessManager(private val appContext: Context) {
                     )
             }
         } catch (_: Exception) {
+            if (requestVersion != verificationVersion || !isForeground) return
             state = BetaAccessState.Error(
                 "Verifica dell'autorizzazione non riuscita. Riprova."
             )
@@ -217,6 +240,7 @@ internal class BetaAccessManager(private val appContext: Context) {
     }
 
     suspend fun signOut(context: Context) {
+        verificationVersion++
         auth?.signOut()
         runCatching {
             CredentialManager.create(context)
@@ -229,17 +253,39 @@ internal class BetaAccessManager(private val appContext: Context) {
 @Composable
 internal fun BetaAccessGate(repository: PortRepository) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val manager = remember {
         BetaAccessManager(context.applicationContext)
     }
     val scope = rememberCoroutineScope()
     val state = manager.state
 
-    LaunchedEffect(manager) {
-        manager.refreshAccess()
+    // Anche se Android sospende il controllo periodico in background, ogni
+    // ritorno in primo piano blocca immediatamente la UI e richiede Firebase.
+    DisposableEffect(manager, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    manager.onForeground()
+                    scope.launch { manager.refreshAccess() }
+                }
+                Lifecycle.Event.ON_PAUSE -> manager.onBackground()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            manager.onBackground()
+        }
+    }
+
+    LaunchedEffect(manager, lifecycleOwner) {
         while (true) {
             delay(ACCESS_RECHECK_MILLIS)
-            manager.refreshAccess()
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                manager.refreshAccess()
+            }
         }
     }
 
