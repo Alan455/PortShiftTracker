@@ -10,7 +10,9 @@ Questa branch aggiunge un gate di accesso prima di `PortShiftApp`.
 - `enabled` deve essere `true`;
 - `expiresAt` deve essere successivo all'ora del server Firebase;
 - la verifica usa `Source.SERVER`, quindi all'avvio serve Internet;
-- l'autorizzazione viene ricontrollata ogni 15 minuti mentre l'app resta aperta.
+- ogni ritorno in primo piano (evento `ON_RESUME`) nasconde le schermate operative e richiede una nuova verifica online;
+- quando l'app viene sospesa, eventuali risposte Firebase precedenti vengono invalidate e non possono sbloccarla;
+- l'autorizzazione viene ricontrollata ogni 15 minuti durante l'uso in primo piano; se il controllo non riesce, le schermate operative rimangono bloccate.
 
 La data del telefono non viene usata per decidere la scadenza.
 
