@@ -156,11 +156,21 @@ internal fun SummaryScreen(repository: PortRepository) {
                 grossCents = total,
                 irpefBasisPoints = irpefBasisPoints,
                 manuallyEnteredCents = existingPayslip?.manualNetCents,
-                onSaveManualNet = { manualCents ->
+                canUpdatePercentage = workers.firstOrNull() != null,
+                onSaveManualNet = { manualCents, recalibratedBasisPoints ->
                     scope.launch {
+                        // Il netto manuale è una fotografia del mese: la percentuale
+                        // calcolata aggiorna il parametro globale solo al salvataggio.
                         val current = featureStore.payslip(month)
                             ?: PayslipComparison(month = month.toString())
                         featureStore.savePayslip(current.copy(manualNetCents = manualCents))
+                        if (recalibratedBasisPoints != null) {
+                            workers.firstOrNull()?.let { worker ->
+                                repository.saveWorker(
+                                    worker.copy(irpefBasisPoints = recalibratedBasisPoints)
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -393,7 +403,8 @@ private fun SummaryNetCard(
     grossCents: Long,
     irpefBasisPoints: Long,
     manuallyEnteredCents: Long?,
-    onSaveManualNet: (Long?) -> Unit
+    canUpdatePercentage: Boolean,
+    onSaveManualNet: (Long?, Long?) -> Unit
 ) {
     val validBasisPoints = irpefBasisPoints.coerceIn(0L, 10_000L)
     val estimatedCents = estimatedNetCents(grossCents, validBasisPoints)
@@ -404,7 +415,9 @@ private fun SummaryNetCard(
         mutableStateOf(manuallyEnteredCents?.toEuroText().orEmpty())
     }
     val parsedManual = parseMonthlyNetCents(manualInput)
-    val manualValid = manualInput.isBlank() || parsedManual != null
+    val updatedBasisPoints = parsedManual?.let { inferredWithholdingBasisPoints(grossCents, it) }
+    val manualValid = manualInput.isBlank() ||
+        (parsedManual != null && updatedBasisPoints != null && canUpdatePercentage)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -469,8 +482,22 @@ private fun SummaryNetCard(
                     isError = !manualValid,
                     supportingText = {
                         Text(
-                            if (manualValid) "Lascia vuoto e salva per eliminare il valore manuale."
-                            else "Inserisci un importo positivo con massimo due decimali."
+                            when {
+                                manualInput.isBlank() ->
+                                    "Lascia vuoto e salva per eliminare il valore manuale; la percentuale resta invariata."
+                                parsedManual == null ->
+                                    "Inserisci un importo non negativo, con massimo due decimali."
+                                grossCents <= 0L ->
+                                    "Serve un lordo mensile maggiore di zero per aggiornare la percentuale."
+                                updatedBasisPoints == null ->
+                                    "Il netto deve essere compreso tra zero e il lordo, esclusi rimborsi e conguagli."
+                                !canUpdatePercentage ->
+                                    "Attendi il caricamento del profilo lavoratore."
+                                else ->
+                                    "Nuova percentuale stimata: " +
+                                        "%.2f".format(Locale.ITALY, updatedBasisPoints / 100.0) +
+                                        "%. Sarà usata anche per gli altri mesi."
+                            }
                         )
                     }
                 )
@@ -481,11 +508,11 @@ private fun SummaryNetCard(
                     TextButton(onClick = { isEditing = false }) { Text("Annulla") }
                     Button(
                         onClick = {
-                            onSaveManualNet(parsedManual)
+                            onSaveManualNet(parsedManual, updatedBasisPoints)
                             isEditing = false
                         },
                         enabled = manualValid
-                    ) { Text("Salva netto") }
+                    ) { Text("Salva netto e aggiorna %") }
                 }
             } else {
                 TextButton(onClick = { isEditing = true }) {
