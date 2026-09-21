@@ -156,7 +156,7 @@ internal fun SettingsScreen(repository: PortRepository) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(scatti, { scatti = it }, label = { Text("Scatti") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Text(
-                    "IRPEF e scatti sono parametri salvati ma non vengono ancora applicati al totale lordo.",
+                    "La percentuale IRPEF viene applicata soltanto al netto stimato nel Riepilogo: il totale lordo resta invariato. Gli scatti non vengono ancora applicati al totale lordo.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -179,6 +179,10 @@ internal fun SettingsScreen(repository: PortRepository) {
                     val hourlyCents = hourlyRate.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
                     val doubleCents = doubleBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
                     val irpefBp = irpef.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
+                    if (irpefBp !in 0L..10_000L) {
+                        savedMessage = "La percentuale IRPEF deve essere compresa tra 0 e 100."
+                        return@Button
+                    }
                     val stepCount = scatti.toIntOrNull() ?: return@Button
                     scope.launch {
                         repository.saveWorker(
