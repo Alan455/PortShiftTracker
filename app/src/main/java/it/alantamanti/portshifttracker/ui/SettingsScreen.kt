@@ -156,7 +156,9 @@ internal fun SettingsScreen(repository: PortRepository) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(scatti, { scatti = it }, label = { Text("Scatti") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Text(
-                    "La percentuale IRPEF viene applicata soltanto al netto stimato nel Riepilogo: il totale lordo resta invariato. Gli scatti non vengono ancora applicati al totale lordo.",
+                    "La percentuale IRPEF è una trattenuta forfettaria stimata, non l’aliquota fiscale reale. " +
+                        "Quando salvi il netto manuale nel Riepilogo, si aggiorna automaticamente per tutti i mesi. " +
+                        "Il totale lordo resta invariato; gli scatti non sono ancora applicati.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
