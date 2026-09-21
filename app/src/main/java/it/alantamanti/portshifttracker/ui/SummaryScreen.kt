@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +55,7 @@ import java.util.Locale
 @Composable
 internal fun SummaryScreen(repository: PortRepository) {
     val rules by repository.rules.collectAsState(initial = emptyList())
+    val workers by repository.workers.collectAsState(initial = emptyList())
     val context = LocalContext.current
     val featureStore = remember(context) { AppFeatureStore(context) }
     val payslips by featureStore.payslipsFlow.collectAsState(initial = emptyList())
@@ -84,6 +87,7 @@ internal fun SummaryScreen(repository: PortRepository) {
     val previousRows by previousRowsFlow.collectAsState(initial = emptyList())
 
     val total = monthRows.sumOf { it.pay.totalPayCents }
+    val irpefBasisPoints = workers.firstOrNull()?.irpefBasisPoints ?: 3000L
     val previousTotal = previousRows.sumOf { it.pay.totalPayCents }
     val daysWorked = monthRows.map(::rowDate).distinct().size
     val previousDaysWorked = previousRows.map(::rowDate).distinct().size
@@ -143,6 +147,22 @@ internal fun SummaryScreen(repository: PortRepository) {
                 month = month,
                 total = total,
                 previousTotal = previousTotal
+            )
+        }
+
+        item {
+            SummaryNetCard(
+                month = month,
+                grossCents = total,
+                irpefBasisPoints = irpefBasisPoints,
+                manuallyEnteredCents = existingPayslip?.manualNetCents,
+                onSaveManualNet = { manualCents ->
+                    scope.launch {
+                        val current = featureStore.payslip(month)
+                            ?: PayslipComparison(month = month.toString())
+                        featureStore.savePayslip(current.copy(manualNetCents = manualCents))
+                    }
+                }
             )
         }
 
@@ -363,6 +383,115 @@ private fun SummaryHeroTotal(
                 style = MaterialTheme.typography.bodySmall,
                 color = delta.color
             )
+        }
+    }
+}
+
+@Composable
+private fun SummaryNetCard(
+    month: YearMonth,
+    grossCents: Long,
+    irpefBasisPoints: Long,
+    manuallyEnteredCents: Long?,
+    onSaveManualNet: (Long?) -> Unit
+) {
+    val validBasisPoints = irpefBasisPoints.coerceIn(0L, 10_000L)
+    val estimatedCents = estimatedNetCents(grossCents, validBasisPoints)
+    val estimatedWithholding = grossCents - estimatedCents
+    val percentLabel = "%.2f".format(Locale.ITALY, validBasisPoints / 100.0)
+    var isEditing by remember(month) { mutableStateOf(false) }
+    var manualInput by remember(month, manuallyEnteredCents) {
+        mutableStateOf(manuallyEnteredCents?.toEuroText().orEmpty())
+    }
+    val parsedManual = parseMonthlyNetCents(manualInput)
+    val manualValid = manualInput.isBlank() || parsedManual != null
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Netto del mese", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Trattenuta stimata ($percentLabel%)")
+                Text("- ${money(estimatedWithholding)}", color = MaterialTheme.colorScheme.error)
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Netto stimato", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        money(estimatedCents),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+            Text(
+                "Stima semplificata: il $percentLabel% è sottratto dal lordo del calendario. " +
+                    "Non è un calcolo fiscale della busta paga.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (manuallyEnteredCents != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Netto inserito dall'utente", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            money(manuallyEnteredCents),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            if (isEditing) {
+                OutlinedTextField(
+                    value = manualInput,
+                    onValueChange = { manualInput = it },
+                    label = { Text("Netto effettivo del mese (€)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = !manualValid,
+                    supportingText = {
+                        Text(
+                            if (manualValid) "Lascia vuoto e salva per eliminare il valore manuale."
+                            else "Inserisci un importo positivo con massimo due decimali."
+                        )
+                    }
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = { isEditing = false }) { Text("Annulla") }
+                    Button(
+                        onClick = {
+                            onSaveManualNet(parsedManual)
+                            isEditing = false
+                        },
+                        enabled = manualValid
+                    ) { Text("Salva netto") }
+                }
+            } else {
+                TextButton(onClick = { isEditing = true }) {
+                    Text(if (manuallyEnteredCents == null) "Inserisci netto manuale" else "Modifica netto manuale")
+                }
+            }
         }
     }
 }
