@@ -38,6 +38,8 @@ data class SpecialDayOverride(
 data class PayslipComparison(
     val month: String,
     val totalCents: Long? = null,
+    /** Netto reale inserito manualmente per questo mese. */
+    val manualNetCents: Long? = null,
     val baseCents: Long? = null,
     val turnoCents: Long? = null,
     val avviamentoCents: Long? = null,
@@ -186,6 +188,7 @@ class AppFeatureStore(context: Context) {
             PayslipComparison(
                 month = obj.optString("month"),
                 totalCents = obj.optNullableLong("totalCents"),
+                manualNetCents = obj.optNullableLong("manualNetCents"),
                 baseCents = obj.optNullableLong("baseCents"),
                 turnoCents = obj.optNullableLong("turnoCents"),
                 avviamentoCents = obj.optNullableLong("avviamentoCents"),
@@ -211,6 +214,7 @@ class AppFeatureStore(context: Context) {
     private fun PayslipComparison.toJson() = JSONObject()
         .put("month", month)
         .putNullable("totalCents", totalCents)
+        .putNullable("manualNetCents", manualNetCents)
         .putNullable("baseCents", baseCents)
         .putNullable("turnoCents", turnoCents)
         .putNullable("avviamentoCents", avviamentoCents)
