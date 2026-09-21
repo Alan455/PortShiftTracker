@@ -16,6 +16,19 @@ internal fun estimatedNetCents(grossCents: Long, irpefBasisPoints: Long): Long {
         .longValueExact()
 }
 
+/**
+ * Calibra la percentuale forfettaria sul netto ordinario comunicato dall'utente.
+ * 10_000 basis points = 100%; null significa che il lordo e il netto
+ * non permettono di ricavare una percentuale nell'intervallo 0..100%.
+ */
+internal fun inferredWithholdingBasisPoints(grossCents: Long, manualNetCents: Long): Long? {
+    if (grossCents <= 0L || manualNetCents < 0L || manualNetCents > grossCents) return null
+    return BigDecimal.valueOf(grossCents - manualNetCents)
+        .multiply(BigDecimal.valueOf(10_000L))
+        .divide(BigDecimal.valueOf(grossCents), 0, RoundingMode.HALF_UP)
+        .longValueExact()
+}
+
 /** Consente 1800, 1800.50 o 1800,50: vuoto significa 'nessun netto manuale'. */
 internal fun parseMonthlyNetCents(text: String): Long? {
     val normalized = text.trim().replace(',', '.')
