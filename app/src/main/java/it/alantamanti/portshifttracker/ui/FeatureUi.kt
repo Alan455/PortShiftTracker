@@ -344,7 +344,9 @@ internal fun PayslipComparisonCard(
                             areaCents = parseEuro(areaText),
                             doppioCents = parseEuro(doppioText),
                             altreCents = parseEuro(altreText),
-                            locked = existing?.locked ?: false
+                            manualNetCents = existing?.manualNetCents,
+                            manualNetCents = existing?.manualNetCents,
+                        locked = existing?.locked ?: false
                         )
                     )
                     saved = true
