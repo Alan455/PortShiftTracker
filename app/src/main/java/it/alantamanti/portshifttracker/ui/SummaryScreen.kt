@@ -2,6 +2,7 @@ package it.alantamanti.portshifttracker.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -190,12 +191,24 @@ internal fun SummaryScreen(repository: PortRepository) {
             )
         }
 
-        if (showComparison) {
-            item { PayslipComparisonCard(month = month, rows = monthRows, rules = rules) }
+        item(key = "payslip_comparison") {
+            AnimatedVisibility(
+                visible = showComparison,
+                enter = fadeIn(tween(190)) + expandVertically(tween(240)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(190))
+            ) {
+                PayslipComparisonCard(month = month, rows = monthRows, rules = rules)
+            }
         }
 
-        if (showExport) {
-            item { MonthlyExportCard(month = month, rows = monthRows) }
+        item(key = "monthly_export") {
+            AnimatedVisibility(
+                visible = showExport,
+                enter = fadeIn(tween(190)) + expandVertically(tween(240)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(190))
+            ) {
+                MonthlyExportCard(month = month, rows = monthRows)
+            }
         }
 
         if (showDetails) {
@@ -765,13 +778,16 @@ private fun SummaryAction(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val actionColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surface,
+        animationSpec = tween(180),
+        label = "Sfondo azione riepilogo"
+    )
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(13.dp),
-        color = if (selected)
-            MaterialTheme.colorScheme.primaryContainer
-        else
-            MaterialTheme.colorScheme.surface
+        color = actionColor
     ) {
         Column(
             Modifier.padding(horizontal = 5.dp, vertical = 10.dp),
