@@ -279,7 +279,7 @@ internal fun ShiftEditorScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    preview?.let { money(animatedTotal.toLong()) } ?: "—",
+                                    preview?.let { money(animatedTotal.roundToLong()) } ?: "—",
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
