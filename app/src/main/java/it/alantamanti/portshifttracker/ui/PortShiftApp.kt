@@ -668,9 +668,9 @@ private fun ShiftDaySection(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        // Nest allowances inside their shift card and keep the
-                        // amounts slightly away from the outer right edge.
-                        .padding(start = 20.dp, end = 10.dp),
+                        // Allowance labels align with the shift title; amounts
+                        // sit clearly inside the right edge of the shift card.
+                        .padding(start = 20.dp, end = 32.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
