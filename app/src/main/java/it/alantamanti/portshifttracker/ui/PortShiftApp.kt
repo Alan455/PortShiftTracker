@@ -666,7 +666,11 @@ private fun ShiftDaySection(
         } else {
             allowanceLines.forEach { line ->
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier
+                        .fillMaxWidth()
+                        // Nest allowances inside their shift card and keep the
+                        // amounts slightly away from the outer right edge.
+                        .padding(start = 20.dp, end = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
