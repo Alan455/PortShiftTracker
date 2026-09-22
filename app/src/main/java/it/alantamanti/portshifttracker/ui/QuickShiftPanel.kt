@@ -1,5 +1,12 @@
 package it.alantamanti.portshifttracker.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +24,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -114,7 +123,13 @@ internal fun QuickShiftPanel(
                 }
             }
 
-            selectedKind?.let { kind ->
+            AnimatedVisibility(
+                visible = selectedKind != null,
+                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+            ) {
+                val kind = selectedKind
+                if (kind != null) {
                 val resolution = resolveQuickShift(kind, date, overrideClass, performanceType)
                 val legacy = kind !in kinds
                 Surface(
@@ -145,6 +160,7 @@ internal fun QuickShiftPanel(
                         )
                     }
                 }
+                }
             }
         }
     }
@@ -168,18 +184,28 @@ private fun QuickShiftTile(
             (it.performanceMask and performanceType.maskBit) != 0
     }
     val shape = RoundedCornerShape(14.dp)
+    val borderColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(180),
+        label = "Bordo turno rapido"
+    )
+    val surfaceColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        animationSpec = tween(180),
+        label = "Sfondo turno rapido"
+    )
 
     Surface(
         modifier = modifier
             .heightIn(min = 88.dp)
             .border(
                 width = if (selected) 2.dp else 1.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                color = borderColor,
                 shape = shape
             )
             .clickable(enabled = rule != null, onClick = onClick),
         shape = shape,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        color = surfaceColor
     ) {
         Column(
             Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
