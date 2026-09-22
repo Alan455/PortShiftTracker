@@ -16,6 +16,13 @@ internal enum class QuickShiftKind(val label: String) {
     GIORNALIERO("Giornaliero")
 }
 
+internal val halfDoubleTurnAllowanceCodes = setOf(
+    "DOP_POM", "DOP_POMS", "DOP_POMF",
+    "DOP_SERA", "DOP_SERAS", "DOP_SERAF",
+    "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2",
+    "DOP_NOTTE", "DOP_NOTTEF"
+)
+
 internal enum class PortDayClass(val label: String) {
     FERIALE("Feriale"),
     SABATO("Sabato"),
