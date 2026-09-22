@@ -163,7 +163,9 @@ internal fun SettingsScreen(repository: PortRepository) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(scatti, { scatti = it }, label = { Text("Scatti") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Text(
-                    "IRPEF e scatti sono parametri salvati ma non vengono ancora applicati al totale lordo.",
+                    "La percentuale IRPEF è una trattenuta forfettaria stimata, non l’aliquota fiscale reale. " +
+                        "Quando salvi il netto manuale nel Riepilogo, si aggiorna automaticamente per tutti i mesi. " +
+                        "Il totale lordo resta invariato; gli scatti non sono ancora applicati.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -192,6 +194,10 @@ internal fun SettingsScreen(repository: PortRepository) {
                         return@Button
                     }
                     val irpefBp = irpef.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: run {
+                        showInvalidInput()
+                        return@Button
+                    }
+                    if (irpefBp !in 0L..10_000L) {
                         showInvalidInput()
                         return@Button
                     }
