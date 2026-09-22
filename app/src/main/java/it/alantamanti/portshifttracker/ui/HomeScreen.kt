@@ -2,6 +2,11 @@ package it.alantamanti.portshifttracker.ui
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -222,17 +227,28 @@ internal fun HomeScreen(repository: PortRepository) {
                 )
             }
 
-            if (dayRows.isEmpty()) {
-                item { EmptyDayCard() }
-            } else {
-                item {
-                    DayDetailsCard(
-                        rows = dayRows,
-                        onDetails = { row -> detailRow = row },
-                        onEdit = { row ->
-                            runWithMonthConfirmation(rowDate(row)) { editingRow = row }
-                        }
-                    )
+            item {
+                AnimatedContent(
+                    targetState = selectedDate,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(220)) togetherWith
+                            fadeOut(animationSpec = tween(140))
+                    },
+                    label = "Scheda giorno selezionato"
+                ) { date ->
+                    val selectedRows = rowsByDate[date].orEmpty()
+                        .sortedBy { it.shift.startEpochMillis }
+                    if (selectedRows.isEmpty()) {
+                        EmptyDayCard()
+                    } else {
+                        DayDetailsCard(
+                            rows = selectedRows,
+                            onDetails = { row -> detailRow = row },
+                            onEdit = { row ->
+                                runWithMonthConfirmation(rowDate(row)) { editingRow = row }
+                            }
+                        )
+                    }
                 }
             }
         }
