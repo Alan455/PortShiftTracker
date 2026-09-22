@@ -93,7 +93,10 @@ class PortShiftApplication : Application() {
         // IMA: Disdetta casa e Disdetta casa festiva sono alternative fra loro.
         // Aggiorniamo anche i database già esistenti, senza toccare importi personalizzati.
         db.openHelper.writableDatabase.execSQL(
-            "UPDATE allowance_rules SET exclusiveGroup = 'IMA_DISDETTA' " +
+            "UPDATE allowance_rules SET exclusiveGroup = 'IMA_DISDETTA', " +
+                "name = CASE code " +
+                "WHEN 'AVV_DIS_CASA' THEN 'Disdetta casa' " +
+                "WHEN 'AVV_DIS_CASA_FEST' THEN 'Disdetta casa festiva' ELSE name END " +
                 "WHERE code IN ('AVV_DIS_CASA','AVV_DIS_CASA_FEST')"
         )
 
