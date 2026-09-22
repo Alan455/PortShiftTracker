@@ -9,6 +9,12 @@ import java.time.ZonedDateTime
 import kotlin.math.roundToLong
 
 class AllowanceCalculator {
+    private val halfDoubleTurnAllowanceCodes = setOf(
+        "DOP_POM", "DOP_POMS", "DOP_POMF",
+        "DOP_SERA", "DOP_SERAS", "DOP_SERAF",
+        "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2",
+        "DOP_NOTTE", "DOP_NOTTEF"
+    )
 
     fun calculate(
         worker: Worker,
@@ -106,9 +112,11 @@ class AllowanceCalculator {
                 calculateRule(shift, rule, performanceBasePay)?.let { line ->
                     val multiplierBp = when {
                         rule.category == AllowanceCategory.TURNO && turnMultiplierBp != 10000 -> turnMultiplierBp
-                        // Nel Mezzo Doppio si dimezzano SOLO le indennità di turno del Doppio
-                        // (PomS, Sera2, SeraF, ecc.). Area, Disagi, Pioggia e Avviamento restano interi.
-                        shift.performanceType == PerformanceType.MEZZO_DOPPIO && rule.category == AllowanceCategory.DOPPIO -> 5000
+                        // Nel Mezzo Doppio si dimezzano SOLO Pom/Sera/Sera2/Notte
+                        // e le relative varianti sabato/festive. Mattina (anche festiva),
+                        // Area, Disagi, Pioggia e Avviamento restano interi.
+                        shift.performanceType == PerformanceType.MEZZO_DOPPIO &&
+                            rule.code in halfDoubleTurnAllowanceCodes -> 5000
                         else -> 10000
                     }
                     if (multiplierBp != 10000) {
