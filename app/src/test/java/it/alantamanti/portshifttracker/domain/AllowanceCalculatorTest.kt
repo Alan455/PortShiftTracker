@@ -267,6 +267,36 @@ class AllowanceCalculatorTest {
         assertEquals(6605, pay.totalPayCents)
     }
 
+    @Test
+    fun mezzoDoppioMattinaFestivaMantieneInteraIndennitaDiMattina() {
+        val matF = doppioSera.copy(id = 31, name = "Mattina festiva Doppio", code = "DOP_MATF", value = 4793)
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.MEZZO_DOPPIO, "2026-09-20T06:30:00", "2026-09-20T13:00:00"),
+            listOf(matF, area, disagio, mezzaIma),
+            setOf(matF.id, area.id, disagio.id, mezzaIma.id)
+        )
+        assertEquals(4420, pay.basePayCents)
+        assertTrue(pay.allowanceLines.any { it.name == matF.name && it.amountCents == 4793L })
+        assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
+        assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
+    }
+
+    @Test
+    fun mezzoDoppioNotteFestivaDimezzaSoloNotte() {
+        val nightF = doppioSera.copy(id = 32, name = "Notte festiva Doppio", code = "DOP_NOTTEF", value = 5645)
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.MEZZO_DOPPIO, "2026-09-20T01:00:00", "2026-09-20T06:30:00"),
+            listOf(nightF, area, disagio, mezzaIma),
+            setOf(nightF.id, area.id, disagio.id, mezzaIma.id)
+        )
+        assertEquals(4420, pay.basePayCents)
+        assertTrue(pay.allowanceLines.any { it.name == nightF.name && it.amountCents == 2823L })
+        assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
+        assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
+    }
+
     private fun shift(type: PerformanceType, start: String, end: String): Shift = Shift(
         id = 1,
         workerId = 1,
