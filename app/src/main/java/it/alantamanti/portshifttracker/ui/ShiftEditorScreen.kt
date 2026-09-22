@@ -181,7 +181,7 @@ internal fun ShiftEditorScreen(
     val specialOverrideClass = specialDays.firstOrNull { it.epochDay == editorDate.toEpochDay() }
         ?.dayClass?.toPortDayClass()
     // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
-    // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
+    // data scelta nel calendario. Nel nuovo flusso anche il Mezzo Doppio usa la scelta rapida.
     val effectiveQuickMode =
         performanceType == PerformanceType.TURNO ||
             performanceType == PerformanceType.DOPPIO ||
@@ -1136,7 +1136,7 @@ private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
         GuidedEntryKind.ABS_CONGEDO -> Triple("PC", "Congedo", "Assenza")
         GuidedEntryKind.ABS_IMA -> Triple("I", "IMA", "Puoi scegliere Disdetta casa o festiva")
         GuidedEntryKind.SECOND_DOPPIO -> Triple("2×", "Doppio completo", "Base e indennità turno intere")
-        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · indennità turno al 50%")
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · Pom/Sera/S2/Notte al 50%")
         GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "Mezzo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
     }
     Surface(
