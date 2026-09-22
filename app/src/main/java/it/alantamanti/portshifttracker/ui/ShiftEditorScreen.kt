@@ -205,6 +205,12 @@ internal fun ShiftEditorScreen(
         ruleUsageScores(historyRows, editorDate, performanceType, role)
     }
     val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
+    val guidedPrimarySelectionReady = when (guidedEntry) {
+        GuidedEntryKind.FIRST_TURNO,
+        GuidedEntryKind.SECOND_DOPPIO,
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> quickKind != null
+        else -> true
+    }
     val hasVisibleManualAllowances = manualRules.any { rule ->
         guidedEntry == null || guidedRuleVisible(guidedEntry, rule)
     }
@@ -886,7 +892,7 @@ internal fun ShiftEditorScreen(
                                 trailing = selectedSummary
                             )
                         }
-                    } else if (hasVisibleManualAllowances) {
+                    } else if (guidedPrimarySelectionReady && hasVisibleManualAllowances) {
                         item {
                             GuidedExpandableRow(
                                 title = "Indennità compatibili",
@@ -897,7 +903,10 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (guidedEntry == null || (hasVisibleManualAllowances && guidedAllowancesExpanded)) {
+                    if (
+                        guidedEntry == null ||
+                        (guidedPrimarySelectionReady && hasVisibleManualAllowances && guidedAllowancesExpanded)
+                    ) {
                     categoriesForPerformance(performanceType)
                         .filterNot { category ->
                             effectiveQuickMode && (
@@ -968,7 +977,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (suggestedCompanions.isNotEmpty()) {
+                    if (guidedPrimarySelectionReady && suggestedCompanions.isNotEmpty()) {
                         if (guidedEntry != null) {
                             item {
                                 GuidedExpandableRow(
