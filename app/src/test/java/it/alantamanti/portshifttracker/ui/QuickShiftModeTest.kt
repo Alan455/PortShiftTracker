@@ -39,15 +39,22 @@ class QuickShiftModeTest {
     }
 
     @Test
-    fun doppio_shows_pom_sera_sera2_and_half_giornaliero() {
+    fun doppio_shows_all_five_shifts_and_half_giornaliero() {
         assertEquals(
             listOf(
+                QuickShiftKind.MATTINA,
                 QuickShiftKind.POMERIGGIO,
                 QuickShiftKind.SERA,
                 QuickShiftKind.SERA2,
+                QuickShiftKind.NOTTE,
                 QuickShiftKind.GIORNALIERO
             ),
             quickShiftKindsFor(PerformanceType.DOPPIO)
+        )
+        assertEquals(
+            listOf(QuickShiftKind.MATTINA, QuickShiftKind.POMERIGGIO,
+                QuickShiftKind.SERA, QuickShiftKind.SERA2, QuickShiftKind.NOTTE),
+            quickShiftKindsFor(PerformanceType.MEZZO_DOPPIO)
         )
         val giornaliero = resolveQuickShift(
             QuickShiftKind.GIORNALIERO,
@@ -96,6 +103,22 @@ class QuickShiftModeTest {
 
         assertEquals("DOP_SERAS2", saturday.ruleCode)
         assertEquals("DOP_SERAF2", holiday.ruleCode)
+    }
+
+    @Test
+    fun mezzo_doppio_uses_matching_weekday_and_festive_allowances() {
+        val friday = LocalDate.of(2026, 9, 18)
+        val sunday = LocalDate.of(2026, 9, 20)
+        assertEquals("DOP_MAT", resolveQuickShift(QuickShiftKind.MATTINA, friday,
+            performanceType = PerformanceType.MEZZO_DOPPIO).ruleCode)
+        assertEquals("DOP_MATF", resolveQuickShift(QuickShiftKind.MATTINA, sunday,
+            performanceType = PerformanceType.MEZZO_DOPPIO).ruleCode)
+        assertEquals("DOP_NOTTE", resolveQuickShift(QuickShiftKind.NOTTE, friday,
+            performanceType = PerformanceType.DOPPIO).ruleCode)
+        assertEquals("DOP_NOTTEF", resolveQuickShift(QuickShiftKind.NOTTE, sunday,
+            performanceType = PerformanceType.MEZZO_DOPPIO).ruleCode)
+        assertEquals("DOP_SERAF2", resolveQuickShift(QuickShiftKind.SERA2, sunday,
+            performanceType = PerformanceType.MEZZO_DOPPIO).ruleCode)
     }
 
     @Test
