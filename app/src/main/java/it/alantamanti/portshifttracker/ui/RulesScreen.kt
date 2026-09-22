@@ -39,6 +39,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -101,6 +102,8 @@ internal fun RulesScreen(repository: PortRepository) {
     var search by remember { mutableStateOf("") }
     var editor by remember { mutableStateOf<AllowanceRuleEntity?>(null) }
     var createNew by remember { mutableStateOf(false) }
+    var ruleSaveError by remember { mutableStateOf<String?>(null) }
+    val feedback = LocalShiftFeedback.current
 
     val categories = when (filter) {
         RuleFilter.TURNI -> setOf(AllowanceCategory.TURNO, AllowanceCategory.MEZZO_TURNO)
@@ -145,7 +148,7 @@ internal fun RulesScreen(repository: PortRepository) {
             )
         }
         item {
-            Button(onClick = { createNew = true }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { ruleSaveError = null; createNew = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("＋  Nuova voce")
             }
         }
@@ -163,8 +166,17 @@ internal fun RulesScreen(repository: PortRepository) {
                 items(grouped[category].orEmpty(), key = { it.id }) { rule ->
                     RuleCard(
                         rule = rule,
-                        onEnabledChanged = { enabled -> scope.launch { repository.saveRule(rule.copy(enabled = enabled)) } },
-                        onEdit = { editor = rule }
+                        onEnabledChanged = { enabled ->
+                            scope.launch {
+                                val outcome = runCatching { repository.saveRule(rule.copy(enabled = enabled)) }
+                                feedback.showSnackbar(
+                                    if (outcome.isSuccess) "Indennità aggiornata."
+                                    else "Modifica dell'indennità non riuscita.",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        },
+                        onEdit = { ruleSaveError = null; editor = rule }
                     )
                 }
             }
@@ -175,11 +187,21 @@ internal fun RulesScreen(repository: PortRepository) {
     if (createNew || editor != null) {
         RuleEditorDialog(
             initial = editor,
-            onDismiss = { createNew = false; editor = null },
+            saveError = ruleSaveError,
+            onDismiss = { createNew = false; editor = null; ruleSaveError = null },
             onSave = { rule ->
-                scope.launch { repository.saveRule(rule) }
-                createNew = false
-                editor = null
+                ruleSaveError = null
+                scope.launch {
+                    runCatching { repository.saveRule(rule) }
+                        .onSuccess {
+                            createNew = false
+                            editor = null
+                            feedback.showSnackbar("Indennità salvata.", duration = SnackbarDuration.Short)
+                        }
+                        .onFailure {
+                            ruleSaveError = "Salvataggio non riuscito. Controlla i dati e riprova."
+                        }
+                }
             }
         )
     }
