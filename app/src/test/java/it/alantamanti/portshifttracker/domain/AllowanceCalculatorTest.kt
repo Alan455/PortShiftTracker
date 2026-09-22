@@ -267,6 +267,34 @@ class AllowanceCalculatorTest {
         assertEquals(6605, pay.totalPayCents)
     }
 
+    @Test
+    fun mezzoDoppioNonDimezzaMattinaFestiva() {
+        val mattinaFestivaDoppio = AllowanceRule(
+            id = 20,
+            name = "MatF Doppio",
+            code = "DOP_MATF",
+            calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+            value = 4793,
+            category = AllowanceCategory.DOPPIO,
+            applicationMode = AllowanceApplicationMode.MANUAL,
+            performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit
+        )
+
+        val pay = calculator.calculate(
+            worker,
+            shift(PerformanceType.MEZZO_DOPPIO, "2026-09-20T06:00:00", "2026-09-20T12:00:00"),
+            listOf(mattinaFestivaDoppio, area, disagio, mezzaIma, polivalenza),
+            setOf(mattinaFestivaDoppio.id, area.id, disagio.id, mezzaIma.id, polivalenza.id)
+        )
+
+        assertEquals(4420, pay.basePayCents)
+        assertTrue(pay.allowanceLines.any { it.name == "MatF Doppio" && it.amountCents == 4793L })
+        assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
+        assertTrue(pay.allowanceLines.any { it.name == "Tubi" && it.amountCents == 775L })
+        assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
+        assertFalse(pay.allowanceLines.any { it.name == "Polivalenza" })
+    }
+
     private fun shift(type: PerformanceType, start: String, end: String): Shift = Shift(
         id = 1,
         workerId = 1,
