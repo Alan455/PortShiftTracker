@@ -1078,6 +1078,7 @@ internal fun RuleCard(
 @Composable
 internal fun RuleEditorDialog(
     initial: AllowanceRuleEntity?,
+    saveError: String? = null,
     onDismiss: () -> Unit,
     onSave: (AllowanceRuleEntity) -> Unit
 ) {
@@ -1180,6 +1181,7 @@ internal fun RuleEditorDialog(
                 }
                 item { OutlinedTextField(roleFilter, { roleFilter = it }, label = { Text("Mansioni opzionali, separate da virgola") }, modifier = Modifier.fillMaxWidth()) }
                 error?.let { item { WarningPanel(it) } }
+                saveError?.let { item { WarningPanel(it) } }
             }
         },
         confirmButton = {
