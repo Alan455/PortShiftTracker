@@ -163,9 +163,7 @@ private enum class MainTab(val label: String, val glyph: String) {
 }
 
 // Shared within the authorized app only; no snackbar may keep gated content visible.
-internal val LocalShiftFeedback = staticCompositionLocalOf<SnackbarHostState> {
-    error("Shift feedback is available only inside PortShiftApp")
-}
+internal val LocalShiftFeedback = staticCompositionLocalOf { SnackbarHostState() }
 
 internal enum class RuleFilter(val label: String) {
     TURNI("Turni"),
