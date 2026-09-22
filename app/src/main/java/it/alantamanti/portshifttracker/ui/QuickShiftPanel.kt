@@ -86,7 +86,7 @@ internal fun QuickShiftPanel(
                     ) {
                         Text(
                             if (performanceType == PerformanceType.MEZZO_DOPPIO) {
-                                "Base ${moneyQuick((doubleBaseCents / 2.0).roundToLong())}; solo l'indennità di turno è al 50%"
+                                "Base ${moneyQuick((doubleBaseCents / 2.0).roundToLong())}; Pom/Sera/S2/Notte al 50%, Mattina intera"
                             } else {
                                 "Base ${moneyQuick(doubleBaseCents)}; indennità di turno intera"
                             },
