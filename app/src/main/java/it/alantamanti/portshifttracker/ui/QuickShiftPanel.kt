@@ -37,6 +37,7 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToLong
 
 private val quickDateFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ITALIAN)
 
@@ -69,17 +70,25 @@ internal fun QuickShiftPanel(
             ) {
                 Column {
                     Text(
-                        if (performanceType == PerformanceType.DOPPIO) "Doppio: scegli il turno" else "Turno rapido",
+                        when (performanceType) {
+                            PerformanceType.DOPPIO -> "Doppio: scegli il turno"
+                            PerformanceType.MEZZO_DOPPIO -> "Mezzo Doppio: scegli il turno"
+                            else -> "Turno rapido"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(dayLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (performanceType == PerformanceType.DOPPIO && doubleBaseCents != null) {
+                    if (
+                        (performanceType == PerformanceType.DOPPIO ||
+                            performanceType == PerformanceType.MEZZO_DOPPIO) &&
+                        doubleBaseCents != null
+                    ) {
                         Text(
-                            if (selectedKind == QuickShiftKind.GIORNALIERO) {
-                                "Mezzo Giornaliero: base fissa € 45,00"
+                            if (performanceType == PerformanceType.MEZZO_DOPPIO) {
+                                "Base ${moneyQuick((doubleBaseCents / 2.0).roundToLong())}; solo l'indennità di turno è al 50%"
                             } else {
-                                "Base ${moneyQuick(doubleBaseCents)} + maggiorazione ${dayClass.label.lowercase(Locale.ITALIAN)} automatica"
+                                "Base ${moneyQuick(doubleBaseCents)}; indennità di turno intera"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
@@ -212,25 +221,29 @@ private fun QuickShiftTile(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            val title = if (performanceType == PerformanceType.DOPPIO) {
+            val title = if (
+                performanceType == PerformanceType.DOPPIO ||
+                performanceType == PerformanceType.MEZZO_DOPPIO
+            ) {
                 when (kind) {
+                    QuickShiftKind.MATTINA -> "Mat"
                     QuickShiftKind.POMERIGGIO -> "Pom"
                     QuickShiftKind.SERA -> "Sera"
                     QuickShiftKind.SERA2 -> "Sera2"
+                    QuickShiftKind.NOTTE -> "Notte"
                     QuickShiftKind.GIORNALIERO -> "½ Giornaliero"
-                    else -> kind.label
                 }
             } else kind.label
 
             Text(
                 title,
-                style = if (performanceType == PerformanceType.DOPPIO)
+                style = if (performanceType != PerformanceType.TURNO)
                     MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelMedium,
-                fontWeight = if (performanceType == PerformanceType.DOPPIO) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (performanceType != PerformanceType.TURNO) FontWeight.Bold else FontWeight.Normal,
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(3.dp))
-            if (performanceType != PerformanceType.DOPPIO) {
+            if (performanceType == PerformanceType.TURNO) {
                 Text(
                     resolution.compactCode,
                     style = MaterialTheme.typography.titleMedium,
@@ -242,16 +255,16 @@ private fun QuickShiftTile(
                 rule?.let {
                     val amount = moneyQuick(it.value)
                     when {
-                        performanceType == PerformanceType.DOPPIO &&
-                            kind == QuickShiftKind.GIORNALIERO -> "Base $amount"
+                        performanceType == PerformanceType.MEZZO_DOPPIO ->
+                            "+${moneyQuick((it.value / 2.0).roundToLong())}"
                         performanceType == PerformanceType.DOPPIO -> "+$amount"
                         kind == QuickShiftKind.GIORNALIERO -> "Base $amount"
                         else -> amount
                     }
                 } ?: "non disponibile",
-                style = if (performanceType == PerformanceType.DOPPIO)
+                style = if (performanceType != PerformanceType.TURNO)
                     MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall,
-                fontWeight = if (performanceType == PerformanceType.DOPPIO) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (performanceType != PerformanceType.TURNO) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
