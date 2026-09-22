@@ -458,12 +458,14 @@ private fun SummaryBreakdownCard(
             )
 
             categoryRows.forEach { item ->
-                SummaryBreakdownRow(
-                    label = item.label,
-                    cents = item.cents,
-                    total = totals.total,
-                    color = item.color
-                )
+                key(item.label) {
+                    SummaryBreakdownRow(
+                        label = item.label,
+                        cents = item.cents,
+                        total = totals.total,
+                        color = item.color
+                    )
+                }
             }
 
             if (otherRows.isNotEmpty()) {
@@ -487,13 +489,15 @@ private fun SummaryBreakdownCard(
                 }
 
                 otherRows.forEach { item ->
-                    SummaryBreakdownRow(
-                        label = item.label,
-                        cents = item.cents,
-                        total = totals.total,
-                        color = Color(0xFF607D9B),
-                        nested = true
-                    )
+                    key(item.label, item.priority) {
+                        SummaryBreakdownRow(
+                            label = item.label,
+                            cents = item.cents,
+                            total = totals.total,
+                            color = Color(0xFF607D9B),
+                            nested = true
+                        )
+                    }
                 }
             }
         }
@@ -532,11 +536,10 @@ private fun SummaryBreakdownRow(
             color = if (nested) MaterialTheme.colorScheme.onSurfaceVariant
             else MaterialTheme.colorScheme.onSurface
         )
-        LinearProgressIndicator(
-            progress = { ratio },
+        SummaryMotionBar(
+            targetProgress = ratio,
             modifier = Modifier.weight(1f).height(if (nested) 5.dp else 7.dp),
-            color = color,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant
+            color = color
         )
         Text(
             money(cents),
@@ -553,6 +556,28 @@ private fun SummaryBreakdownRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+/**
+ * Only the graphic bar is interpolated. The monetary amount and percentage next
+ * to it always show the exact, current calculation, including during animation.
+ */
+@Composable
+private fun SummaryMotionBar(
+    targetProgress: Float,
+    modifier: Modifier,
+    color: Color
+) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(targetProgress) {
+        progress.animateTo(targetProgress, animationSpec = tween(300))
+    }
+    LinearProgressIndicator(
+        progress = { progress.value },
+        modifier = modifier,
+        color = color,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+    )
 }
 
 private data class SummaryOtherBreakdownItem(
@@ -607,11 +632,10 @@ private fun SummaryMonthTrendCard(
                         modifier = Modifier.width(44.dp),
                         style = MaterialTheme.typography.labelSmall
                     )
-                    LinearProgressIndicator(
-                        progress = { (value.toFloat() / maxWeek.toFloat()).coerceIn(0f, 1f) },
+                    SummaryMotionBar(
+                        targetProgress = (value.toFloat() / maxWeek.toFloat()).coerceIn(0f, 1f),
                         modifier = Modifier.weight(1f).height(8.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         money(value),
