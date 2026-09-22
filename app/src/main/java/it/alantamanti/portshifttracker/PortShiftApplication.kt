@@ -90,6 +90,13 @@ class PortShiftApplication : Application() {
             "DELETE FROM allowance_rules WHERE code IN ('AVV_FT','AVV_MM','AVV_IMA','AVV_FISIOS')"
         )
 
+        // IMA: Disdetta casa e Disdetta casa festiva sono alternative fra loro.
+        // Aggiorniamo anche i database già esistenti, senza toccare importi personalizzati.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET exclusiveGroup = 'IMA_DISDETTA' " +
+                "WHERE code IN ('AVV_DIS_CASA','AVV_DIS_CASA_FEST')"
+        )
+
         // TUMezzo/ONmezzo sostituiscono il turno intero: manteniamo l'importo
         // eventualmente personalizzato, ma correggiamo il comportamento anche sui DB esistenti.
         db.openHelper.writableDatabase.execSQL(
