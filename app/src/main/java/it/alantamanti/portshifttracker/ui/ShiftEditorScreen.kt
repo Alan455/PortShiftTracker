@@ -970,16 +970,20 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (showBreakdown) {
-                        preview?.let { pay ->
-                            item {
+                    if (preview != null) {
+                        item {
+                            AnimatedVisibility(
+                                visible = showBreakdown,
+                                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+                            ) {
                                 EditorSectionCard(title = "Dettaglio calcolo") {
-                                    BreakdownLine("Base", pay.basePayCents)
-                                    pay.allowanceLines.forEach { line ->
+                                    BreakdownLine("Base", preview.basePayCents)
+                                    preview.allowanceLines.forEach { line ->
                                         BreakdownLine(line.name, line.amountCents)
                                     }
                                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                                    BreakdownLine("Totale", pay.totalPayCents, bold = true, primary = true)
+                                    BreakdownLine("Totale", preview.totalPayCents, bold = true, primary = true)
                                 }
                             }
                         }
