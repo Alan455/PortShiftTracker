@@ -81,7 +81,12 @@ object DefaultCatalog {
         add(fixed("AREA_G3", "G3", 1930, AllowanceCategory.AREA, 314, group = "AREA"))
         add(fixed("AREA_U", "U", 570, AllowanceCategory.AREA, 315, group = "AREA"))
 
-        // DOPPI
+        // DOPPI. Anche Mattina e Notte sono disponibili nel secondo turno.
+        // I codici mancanti vengono aggiunti senza sovrascrivere le tariffe personalizzate.
+        add(fixed("DOP_MAT", "Mat", 0, AllowanceCategory.DOPPIO, 390, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_MATF", "MatF", 4793, AllowanceCategory.DOPPIO, 391, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_NOTTE", "Notte", 1136, AllowanceCategory.DOPPIO, 392, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_NOTTEF", "NotteF", 5645, AllowanceCategory.DOPPIO, 393, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_POM", "Pom", 0, AllowanceCategory.DOPPIO, 400, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAS", "SeraS", 1562, AllowanceCategory.DOPPIO, 401, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_POMS", "PomS", 1136, AllowanceCategory.DOPPIO, 402, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
