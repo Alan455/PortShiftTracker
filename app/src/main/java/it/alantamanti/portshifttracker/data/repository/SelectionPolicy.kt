@@ -21,7 +21,9 @@ fun normalizeSelectedRuleIds(
 ): Set<Long> {
     val compatible = selectedIds.filterTo(mutableSetOf()) { id ->
         rules.firstOrNull { it.id == id }?.let { rule ->
-            rule.enabled && (rule.performanceMask and performanceType.maskBit) != 0
+            rule.enabled && (rule.performanceMask and performanceType.maskBit) != 0 &&
+                (performanceType == PerformanceType.TURNO ||
+                    rule.code !in setOf("ALT_MEZZA_IMA", "DOP_TU_MEZZO", "DOP_ON_MEZZO"))
         } == true
     }
 
