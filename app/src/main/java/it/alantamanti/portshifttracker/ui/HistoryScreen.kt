@@ -1,6 +1,14 @@
 package it.alantamanti.portshifttracker.ui
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,16 +23,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -152,13 +163,33 @@ internal fun HistoryScreen(repository: PortRepository) {
                         }
                     }
 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${filtered.size} risultati", style = MaterialTheme.typography.labelMedium)
-                        Text(
-                            money(filtered.sumOf { it.pay.totalPayCents }),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AnimatedContent(
+                            targetState = filtered.size,
+                            transitionSpec = {
+                                fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                            },
+                            label = "Risultati storico"
+                        ) { count ->
+                            Text("$count risultati", style = MaterialTheme.typography.labelMedium)
+                        }
+                        AnimatedContent(
+                            targetState = filtered.sumOf { it.pay.totalPayCents },
+                            transitionSpec = {
+                                fadeIn(tween(190)) togetherWith fadeOut(tween(120))
+                            },
+                            label = "Totale storico filtrato"
+                        ) { totalCents ->
+                            Text(
+                                money(totalCents),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
@@ -199,7 +230,14 @@ internal fun HistoryScreen(repository: PortRepository) {
                         }
                     }
                     items(categoryRows, key = { it.shift.id }) { row ->
-                        HistoryEntryCard(row)
+                        HistoryEntryCard(
+                            row = row,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(180),
+                                placementSpec = tween(220),
+                                fadeOutSpec = tween(120)
+                            )
+                        )
                     }
                 }
             }
@@ -208,8 +246,13 @@ internal fun HistoryScreen(repository: PortRepository) {
 }
 
 @Composable
-private fun HistoryEntryCard(row: ShiftWithPay) {
+private fun HistoryEntryCard(
+    row: ShiftWithPay,
+    modifier: Modifier = Modifier
+) {
+    var showDetails by remember(row.shift.id) { mutableStateOf(false) }
     Card(
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -233,6 +276,35 @@ private fun HistoryEntryCard(row: ShiftWithPay) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            TextButton(
+                modifier = Modifier.align(Alignment.End),
+                onClick = { showDetails = !showDetails }
+            ) {
+                Text(if (showDetails) "Nascondi dettaglio" else "Vedi dettaglio")
+            }
+            AnimatedVisibility(
+                visible = showDetails,
+                enter = fadeIn(tween(180)) + expandVertically(tween(240)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    HorizontalDivider()
+                    HistoryPayLine("Base", row.pay.basePayCents)
+                    row.pay.allowanceLines.forEach { line ->
+                        HistoryPayLine(line.name, line.amountCents)
+                    }
+                    HorizontalDivider()
+                    HistoryPayLine("Totale", row.pay.totalPayCents)
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun HistoryPayLine(label: String, cents: Long) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text(money(cents), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
