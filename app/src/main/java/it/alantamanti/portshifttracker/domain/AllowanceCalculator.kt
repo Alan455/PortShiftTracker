@@ -106,9 +106,17 @@ class AllowanceCalculator {
                 calculateRule(shift, rule, performanceBasePay)?.let { line ->
                     val multiplierBp = when {
                         rule.category == AllowanceCategory.TURNO && turnMultiplierBp != 10000 -> turnMultiplierBp
-                        // Nel Mezzo Doppio si dimezzano SOLO le indennità di turno del Doppio
-                        // (PomS, Sera2, SeraF, ecc.). Area, Disagi, Pioggia e Avviamento restano interi.
-                        shift.performanceType == PerformanceType.MEZZO_DOPPIO && rule.category == AllowanceCategory.DOPPIO -> 5000
+                        // Mezzo Doppio: metà base ed esclusivamente le maggiorazioni
+                        // Pom/Sera/Sera2/Notte (anche sabato e festivi) a metà.
+                        // Mattina, Area, Avviamento, Disagi e Altre voci non sono dimezzati.
+                        shift.performanceType == PerformanceType.MEZZO_DOPPIO &&
+                            rule.category == AllowanceCategory.DOPPIO &&
+                            rule.code in setOf(
+                                "DOP_POM", "DOP_POMS", "DOP_POMF",
+                                "DOP_SERA", "DOP_SERAS", "DOP_SERAF",
+                                "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2",
+                                "DOP_NOTTE", "DOP_NOTTEF"
+                            ) -> 5000
                         else -> 10000
                     }
                     if (multiplierBp != 10000) {
