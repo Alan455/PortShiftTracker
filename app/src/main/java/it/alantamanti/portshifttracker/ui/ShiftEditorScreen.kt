@@ -803,20 +803,27 @@ internal fun ShiftEditorScreen(
                             Spacer(Modifier.height(4.dp))
                             if (!showNotes) {
                                 TextButton(onClick = { showNotes = true }) { Text("＋ Aggiungi note") }
-                            } else {
-                                OutlinedTextField(
-                                    value = notes,
-                                    onValueChange = { notes = it },
-                                    label = { Text("Note") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    minLines = 2
-                                )
-                                TextButton(
-                                    onClick = {
-                                        notes = ""
-                                        showNotes = false
-                                    }
-                                ) { Text("Rimuovi note") }
+                            }
+                            AnimatedVisibility(
+                                visible = showNotes,
+                                enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+                            ) {
+                                Column {
+                                    OutlinedTextField(
+                                        value = notes,
+                                        onValueChange = { notes = it },
+                                        label = { Text("Note") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minLines = 2
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            notes = ""
+                                            showNotes = false
+                                        }
+                                    ) { Text("Rimuovi note") }
+                                }
                             }
                         }
                     }
