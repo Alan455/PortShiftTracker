@@ -3,6 +3,7 @@ package it.alantamanti.portshifttracker.ui
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -48,6 +49,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -56,6 +59,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -67,8 +72,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -154,6 +162,11 @@ private enum class MainTab(val label: String, val glyph: String) {
     SETTINGS("Impostazioni", "⚙")
 }
 
+// Shared within the authorized app only; no snackbar may keep gated content visible.
+internal val LocalShiftFeedback = staticCompositionLocalOf<SnackbarHostState> {
+    error("Shift feedback is available only inside PortShiftApp")
+}
+
 internal enum class RuleFilter(val label: String) {
     TURNI("Turni"),
     DOPPI("Doppi"),
@@ -164,59 +177,98 @@ internal enum class RuleFilter(val label: String) {
 @Composable
 fun PortShiftApp(repository: PortRepository) {
     var selectedTab by remember { mutableStateOf(MainTab.HOME) }
+    val feedback = remember { SnackbarHostState() }
+    val haptics = LocalHapticFeedback.current
 
     MaterialTheme(colorScheme = portColorScheme) {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
-            topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = PortBlueDark,
-                        titleContentColor = Color.White
-                    ),
-                    title = {
-                        Column {
-                            Text(
-                                if (selectedTab == MainTab.HOME) "PortShiftTracker" else selectedTab.label,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            if (selectedTab == MainTab.HOME) {
-                                Text(
-                                    "Il tuo lavoro, i tuoi numeri",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
+        CompositionLocalProvider(LocalShiftFeedback provides feedback) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.surface,
+                snackbarHost = { SnackbarHost(hostState = feedback) },
+                topBar = {
+                    TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = PortBlueDark,
+                            titleContentColor = Color.White
+                        ),
+                        title = {
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = {
+                                    fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                                },
+                                label = "Titolo sezione Shift"
+                            ) { tab ->
+                                Column {
+                                    Text(
+                                        if (tab == MainTab.HOME) "PortShiftTracker" else tab.label,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (tab == MainTab.HOME) {
+                                        Text(
+                                            "Il tuo lavoro, i tuoi numeri",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.85f)
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                )
-            },
-            bottomBar = {
-                NavigationBar(containerColor = Color.White) {
-                    MainTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = selectedTab == tab,
-                            onClick = { selectedTab = tab },
-                            icon = {
-                                Text(
-                                    tab.glyph,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            },
-                            label = { Text(tab.label) }
-                        )
+                    )
+                },
+                bottomBar = {
+                    NavigationBar(containerColor = Color.White) {
+                        MainTab.entries.forEach { tab ->
+                            val selected = selectedTab == tab
+                            val iconScale by animateFloatAsState(
+                                targetValue = if (selected) 1.10f else 1f,
+                                animationSpec = tween(180),
+                                label = "Indicatore scheda ${tab.label}"
+                            )
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    if (!selected) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedTab = tab
+                                    }
+                                },
+                                icon = {
+                                    Text(
+                                        tab.glyph,
+                                        modifier = Modifier.graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                label = { Text(tab.label) }
+                            )
+                        }
                     }
                 }
-            }
-        ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
-                when (selectedTab) {
-                    MainTab.HOME -> HomeScreen(repository)
-                    MainTab.SUMMARY -> SummaryScreen(repository)
-                    MainTab.HISTORY -> HistoryScreen(repository)
-                    MainTab.RULES -> RulesScreen(repository)
-                    MainTab.SETTINGS -> SettingsScreen(repository)
+            ) { padding ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    // The Firebase gate owns this whole tree: losing authorization
+                    // removes both current and outgoing tabs immediately.
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        modifier = Modifier.fillMaxSize(),
+                        transitionSpec = {
+                            fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                        },
+                        label = "Navigazione principale"
+                    ) { tab ->
+                        when (tab) {
+                            MainTab.HOME -> HomeScreen(repository)
+                            MainTab.SUMMARY -> SummaryScreen(repository)
+                            MainTab.HISTORY -> HistoryScreen(repository)
+                            MainTab.RULES -> RulesScreen(repository)
+                            MainTab.SETTINGS -> SettingsScreen(repository)
+                        }
+                    }
                 }
             }
         }
