@@ -118,6 +118,7 @@ internal fun ShiftEditorScreen(
     initialShift: ShiftEntity?,
     initialSelectedIds: Set<Long>,
     isCopy: Boolean = false,
+    guidedChoice: GuidedEntryChoice? = null,
     historyRows: List<ShiftWithPay>,
     specialDays: List<SpecialDayOverride>,
     onDismiss: () -> Unit,
@@ -136,7 +137,9 @@ internal fun ShiftEditorScreen(
     var endText by remember(initialShift?.id, initialDate) { mutableStateOf(initialEnd.format(editFormatter)) }
     var role by remember(initialShift?.id) { mutableStateOf(initialShift?.role ?: "Operatore") }
     var notes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes.orEmpty()) }
-    var performanceType by remember(initialShift?.id) { mutableStateOf(initialShift?.performanceType ?: PerformanceType.TURNO) }
+    var performanceType by remember(initialShift?.id, guidedChoice) {
+        mutableStateOf(guidedChoice?.performanceType ?: initialShift?.performanceType ?: PerformanceType.TURNO)
+    }
     var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
     var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -156,12 +159,20 @@ internal fun ShiftEditorScreen(
     }
     val isGiornaliero = performanceType == PerformanceType.TURNO &&
         quickKind == QuickShiftKind.GIORNALIERO
+    val guided = guidedChoice != null
+    val guidedAbsence = guidedChoice?.isAbsence == true
+    val guidedWork = guided && !guidedAbsence
+    val guidedHasShiftPicker = guidedChoice in setOf(
+        GuidedEntryChoice.WORK_TURNO,
+        GuidedEntryChoice.DOUBLE_TURNO,
+        GuidedEntryChoice.HALF_DOUBLE
+    )
     val editorDate = runCatching { LocalDateTime.parse(startText, editFormatter).toLocalDate() }.getOrDefault(initialDate)
     val specialOverrideClass = specialDays.firstOrNull { it.epochDay == editorDate.toEpochDay() }
         ?.dayClass?.toPortDayClass()
     // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
     // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
-    val effectiveQuickMode =
+    val effectiveQuickMode = guided ||
         performanceType == PerformanceType.TURNO || performanceType == PerformanceType.DOPPIO
     val calculator = remember { AllowanceCalculator() }
 
@@ -185,8 +196,10 @@ internal fun ShiftEditorScreen(
     val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
         if (initialShift == null && !isCopy) lastRepeatCandidate(historyRows, editorDate) else null
     }
-    val absenceRule = selectedRules.firstOrNull { it.code == "ALT_FERIE" || it.code == "ALT_MALATTIA" }
-    val rangeEnabled = initialShift == null && !isCopy && absenceRule != null
+    val absenceRule = selectedRules.firstOrNull {
+        it.code in setOf("ALT_FERIE", "ALT_MALATTIA", "AVV_CONGEDO", "AVV_INAIL")
+    }
+    val rangeEnabled = initialShift == null && !isCopy && absenceRule != null && (!guided || guidedAbsence)
     val effectiveRangeEnd = if (rangeEndDate.isBefore(editorDate)) editorDate else rangeEndDate
     val selectedTags = selectedRules.flatMap { parseTags(it.tagsCsv) }.toSet()
     val relationWarnings = selectedRules.mapNotNull { rule ->
@@ -262,7 +275,8 @@ internal fun ShiftEditorScreen(
                                     }
                                 )
                                 Text(
-                                    italianTitle(editorDate.format(shortDayFormatter)),
+                                    italianTitle(editorDate.format(shortDayFormatter)) +
+                                        (guidedChoice?.let { " · ${it.label}" } ?: ""),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.82f)
                                 )
