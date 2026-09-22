@@ -5,7 +5,10 @@ import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.PerformanceType
 
 private val halfTurnCodes = setOf("DOP_TU_MEZZO", "DOP_ON_MEZZO")
-private val absenceCodes = setOf("ALT_FERIE", "ALT_MALATTIA", "ALT_IMA")
+private val absenceCodes = setOf(
+    "ALT_FERIE", "ALT_MALATTIA", "ALT_IMA",
+    "AVV_CONGEDO", "AVV_INAIL", "AVV_DS"
+)
 
 /**
  * Applica le relazioni obbligatorie tra voci prima di calcolo e salvataggio.
@@ -40,7 +43,7 @@ fun normalizeSelectedRuleIds(
 
 /**
  * Restituisce il motivo per cui una prestazione non è ancora salvabile.
- * Ferie/Malattia/IMA sostituiscono il turno e non richiedono un tipo Mat/Pom/Sera.
+ * Le assenze (Ferie, Malattia, IMA, Congedo, INAIL e Donazione) non richiedono un turno M/P/S/S2/N.
  */
 fun selectionValidationMessage(
     performanceType: PerformanceType,
