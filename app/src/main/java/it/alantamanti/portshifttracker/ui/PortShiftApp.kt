@@ -872,7 +872,7 @@ internal fun AllowanceCategoryCard(
                 )
                 AllowanceCategory.DOPPIO -> Text(
                     if (performanceType == PerformanceType.MEZZO_DOPPIO)
-                        "Nel Mezzo Doppio si dimezza solo l'indennità di turno; Area e Disagi restano interi."
+                        "Nel Mezzo Doppio si dimezzano solo le indennità di Pom/Sera/S2/Notte; Mattina, Area e Disagi restano interi."
                     else
                         "La base Doppio è separata: qui scegli la relativa indennità di turno.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1323,7 +1323,7 @@ internal fun performanceInfo(worker: WorkerEntity, type: PerformanceType): Strin
     PerformanceType.DOPPIO ->
         "Base autonoma ${money(worker.doubleBaseCents)}. Può avere Area e Disagi come un turno normale, ma non riceve Polivalenza né Mezza IMA."
     PerformanceType.MEZZO_DOPPIO ->
-        "Base ${money((worker.doubleBaseCents / 2.0).roundToLong())}. Area e Disagi restano interi; si dimezza solo l'indennità di turno del Doppio."
+        "Base ${money((worker.doubleBaseCents / 2.0).roundToLong())}. Solo Pom/Sera/S2/Notte e relative varianti sono dimezzate; Mattina, Area e Disagi restano interi."
 }
 
 internal fun categoryEditorTitle(category: AllowanceCategory, performanceType: PerformanceType): String = when (category) {
