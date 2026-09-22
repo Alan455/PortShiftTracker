@@ -117,6 +117,7 @@ internal fun ShiftEditorScreen(
     initialDate: LocalDate,
     initialShift: ShiftEntity?,
     initialSelectedIds: Set<Long>,
+    guidedEntry: GuidedEntryKind? = null,
     isCopy: Boolean = false,
     historyRows: List<ShiftWithPay>,
     specialDays: List<SpecialDayOverride>,
@@ -131,13 +132,24 @@ internal fun ShiftEditorScreen(
     val initialEnd = initialShift?.let {
         LocalDateTime.ofInstant(Instant.ofEpochMilli(it.endEpochMillis), initialZone)
     } ?: initialStart.plusHours(6)
+    val guidedInitialIds = remember(guidedEntry, rules) {
+        guidedEntry?.initialRuleCodes()
+            ?.mapNotNull { code -> rules.firstOrNull { it.enabled && it.code == code }?.id }
+            ?.toSet()
+            .orEmpty()
+    }
+    val guidedPerformanceType = guidedEntry?.initialPerformanceType()
 
     var startText by remember(initialShift?.id, initialDate) { mutableStateOf(initialStart.format(editFormatter)) }
     var endText by remember(initialShift?.id, initialDate) { mutableStateOf(initialEnd.format(editFormatter)) }
     var role by remember(initialShift?.id) { mutableStateOf(initialShift?.role ?: "Operatore") }
     var notes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes.orEmpty()) }
-    var performanceType by remember(initialShift?.id) { mutableStateOf(initialShift?.performanceType ?: PerformanceType.TURNO) }
-    var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
+    var performanceType by remember(initialShift?.id, guidedEntry) {
+        mutableStateOf(guidedPerformanceType ?: initialShift?.performanceType ?: PerformanceType.TURNO)
+    }
+    var selectedIds by remember(initialShift?.id, guidedEntry, guidedInitialIds) {
+        mutableStateOf(if (guidedEntry != null) guidedInitialIds else initialSelectedIds)
+    }
     var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -148,9 +160,9 @@ internal fun ShiftEditorScreen(
     var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
         mutableStateOf(
             inferQuickShiftKind(
-                initialSelectedIds,
+                if (guidedEntry != null) guidedInitialIds else initialSelectedIds,
                 rules,
-                initialShift?.performanceType ?: PerformanceType.TURNO
+                guidedPerformanceType ?: initialShift?.performanceType ?: PerformanceType.TURNO
             )
         )
     }
@@ -162,7 +174,10 @@ internal fun ShiftEditorScreen(
     // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
     // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
     val effectiveQuickMode =
-        performanceType == PerformanceType.TURNO || performanceType == PerformanceType.DOPPIO
+        performanceType == PerformanceType.TURNO ||
+            performanceType == PerformanceType.DOPPIO ||
+            (guidedEntry == GuidedEntryKind.SECOND_MEZZO_DOPPIO &&
+                performanceType == PerformanceType.MEZZO_DOPPIO)
     val calculator = remember { AllowanceCalculator() }
 
     val manualRules = rules.filter {
@@ -199,7 +214,9 @@ internal fun ShiftEditorScreen(
         } else null
     }
     val suggestedCompanions = manualRules.filter { rule ->
-        rule.id !in normalizedSelectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
+        (guidedEntry == null || guidedRuleVisible(guidedEntry, rule)) &&
+            rule.id !in normalizedSelectedIds &&
+            parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
     val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in normalizedSelectedIds })
 
