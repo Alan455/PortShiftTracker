@@ -50,7 +50,9 @@ class AllowanceCalculator {
         // La maschera rende la compatibilità configurabile: area/disagi possono valere
         // sia per turno sia per doppio, mentre Polivalenza vale solo per il turno ordinario.
         val enabledCompatibleRules = rules.filter {
-            it.enabled && (it.performanceMask and shift.performanceType.maskBit) != 0
+            it.enabled && (it.performanceMask and shift.performanceType.maskBit) != 0 &&
+                (shift.performanceType == PerformanceType.TURNO ||
+                    it.code !in setOf("ALT_MEZZA_IMA", "DOP_TU_MEZZO", "DOP_ON_MEZZO"))
         }
         val selectedRules = enabledCompatibleRules.filter { it.id in normalizedSelectedManualRuleIds }
 
