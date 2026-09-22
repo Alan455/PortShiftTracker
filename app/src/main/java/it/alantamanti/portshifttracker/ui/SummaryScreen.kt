@@ -212,12 +212,22 @@ internal fun SummaryScreen(repository: PortRepository) {
         }
 
         if (showDetails) {
-            item { SectionHeader("Giornate del mese") }
+            item(key = "summary_days_heading") {
+                SectionHeader("Giornate del mese")
+            }
             if (groupedDays.isEmpty()) {
-                item { EmptySummaryCard() }
+                item(key = "summary_days_empty") { EmptySummaryCard() }
             } else {
                 items(groupedDays, key = { it.first }) { (date, dayRows) ->
-                    SummaryDayCard(date, dayRows)
+                    SummaryDayCard(
+                        date = date,
+                        dayRows = dayRows,
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(180),
+                            placementSpec = tween(220),
+                            fadeOutSpec = tween(120)
+                        )
+                    )
                 }
             }
         }
@@ -815,9 +825,11 @@ private fun SummaryAction(
 @Composable
 private fun SummaryDayCard(
     date: LocalDate,
-    dayRows: List<ShiftWithPay>
+    dayRows: List<ShiftWithPay>,
+    modifier: Modifier = Modifier
 ) {
     Card(
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(16.dp)
     ) {
