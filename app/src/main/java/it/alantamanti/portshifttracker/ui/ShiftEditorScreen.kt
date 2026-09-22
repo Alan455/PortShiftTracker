@@ -932,7 +932,20 @@ internal fun ShiftEditorScreen(
                             }
                         if (categoryRules.isNotEmpty()) {
                             item {
-                                AllowanceCategoryCard(
+                                if (guided) GuidedAllowanceGroup(
+                                    category = category,
+                                    rules = categoryRules,
+                                    selectedIds = selectedIds,
+                                    performanceType = performanceType,
+                                    usageCounts = usageScores,
+                                    onToggle = { rule, checked ->
+                                        selectedIds = normalizeSelectedRuleIds(
+                                            performanceType,
+                                            toggleRule(selectedIds, rule, guidedVisibleRules, checked),
+                                            rules
+                                        )
+                                    }
+                                ) else AllowanceCategoryCard(
                                     category = category,
                                     rules = categoryRules,
                                     selectedIds = selectedIds,
