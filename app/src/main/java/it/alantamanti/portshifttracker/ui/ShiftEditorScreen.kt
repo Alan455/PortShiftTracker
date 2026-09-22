@@ -157,7 +157,14 @@ internal fun ShiftEditorScreen(
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
+    var quickKind by remember(
+        initialShift?.id,
+        initialSelectedIds,
+        rules,
+        guidedEntry,
+        guidedInitialIds,
+        guidedPerformanceType
+    ) {
         mutableStateOf(
             inferQuickShiftKind(
                 if (guidedEntry != null) guidedInitialIds else initialSelectedIds,
@@ -196,6 +203,9 @@ internal fun ShiftEditorScreen(
         ruleUsageScores(historyRows, editorDate, performanceType, role)
     }
     val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
+    val hasVisibleManualAllowances = manualRules.any { rule ->
+        guidedEntry == null || guidedRuleVisible(guidedEntry, rule)
+    }
     val recentRoleOptions = remember(historyRows, editorDate) { recentRoles(historyRows, editorDate) }
     val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
         if (initialShift == null && !isCopy) lastRepeatCandidate(historyRows, editorDate) else null
@@ -867,13 +877,20 @@ internal fun ShiftEditorScreen(
                         )
                     }
 
-                    item {
-                        SectionHeader(
-                            title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
-                            trailing = selectedSummary
-                        )
+                    if (guidedEntry == null || hasVisibleManualAllowances) {
+                        item {
+                            SectionHeader(
+                                title = if (guidedEntry == null) {
+                                    if (effectiveQuickMode) "2. Indennità" else "3. Indennità"
+                                } else {
+                                    "Indennità"
+                                },
+                                trailing = selectedSummary
+                            )
+                        }
                     }
 
+                    if (guidedEntry == null || hasVisibleManualAllowances) {
                     categoriesForPerformance(performanceType)
                         .filterNot { category ->
                             effectiveQuickMode && (
@@ -908,6 +925,7 @@ internal fun ShiftEditorScreen(
                                 )
                             }
                         }
+                    }
                     }
 
                     if (initialShift == null) {
@@ -1053,6 +1071,79 @@ internal fun ShiftEditorScreen(
 }
 
 
+
+@Composable
+private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
+    val (code, title, subtitle) = when (entry) {
+        GuidedEntryKind.FIRST_TURNO -> Triple("T", "Turno", "Scegli M, P, S, S2 o N")
+        GuidedEntryKind.FIRST_GIORNALIERO -> Triple("G", "Giornaliero", "Base € 90,00 · ONMezzo disponibile")
+        GuidedEntryKind.ABS_FERIE -> Triple("Ff", "Ferie", "Assenza")
+        GuidedEntryKind.ABS_MALATTIA -> Triple("Mm", "Malattia", "Assenza")
+        GuidedEntryKind.ABS_CONGEDO -> Triple("PC", "Congedo", "Assenza")
+        GuidedEntryKind.ABS_IMA -> Triple("I", "IMA", "Puoi scegliere Disdetta casa o festiva")
+        GuidedEntryKind.SECOND_DOPPIO -> Triple("2×", "Doppio completo", "Base e indennità turno intere")
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · indennità turno al 50%")
+        GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "Mezzo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+            ) {
+                Text(
+                    code,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Column {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private val guidedAbsenceRuleCodes = setOf(
+    "ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_DS", "AVV_INAIL", "AVV_CONGEDO"
+)
+
+private fun guidedRuleVisible(entry: GuidedEntryKind, rule: AllowanceRuleEntity): Boolean = when (entry) {
+    GuidedEntryKind.FIRST_TURNO ->
+        rule.code !in guidedAbsenceRuleCodes &&
+            rule.code != "DOP_ON_MEZZO"
+
+    GuidedEntryKind.FIRST_GIORNALIERO ->
+        rule.code !in guidedAbsenceRuleCodes &&
+            rule.code != "DOP_TU_MEZZO"
+
+    GuidedEntryKind.ABS_IMA ->
+        rule.code == "AVV_DIS_CASA" || rule.code == "AVV_DIS_CASA_FEST"
+
+    GuidedEntryKind.ABS_FERIE,
+    GuidedEntryKind.ABS_MALATTIA,
+    GuidedEntryKind.ABS_CONGEDO -> false
+
+    GuidedEntryKind.SECOND_DOPPIO,
+    GuidedEntryKind.SECOND_MEZZO_DOPPIO,
+    GuidedEntryKind.SECOND_MEZZO_GIORNALIERO ->
+        rule.code !in guidedAbsenceRuleCodes &&
+            rule.code !in setOf("ALT_MEZZA_IMA", "ALT_POLIVALENZA", "DOP_TU_MEZZO", "DOP_ON_MEZZO")
+}
 
 @Composable
 private fun PreviewBreakdownRow(
