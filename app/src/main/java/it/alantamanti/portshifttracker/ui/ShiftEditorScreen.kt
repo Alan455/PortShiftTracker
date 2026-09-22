@@ -373,8 +373,9 @@ internal fun ShiftEditorScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    item {
-                        EditorSectionCard(title = "1. Tipo di prestazione") {
+                    if (guidedEntry == null) {
+                        item {
+                            EditorSectionCard(title = "1. Tipo di prestazione") {
                             val choices = listOf(
                                 EditorPerformanceChoice.TURNO,
                                 EditorPerformanceChoice.GIORNALIERO,
@@ -542,10 +543,13 @@ internal fun ShiftEditorScreen(
                                     else -> performanceInfo(worker, performanceType)
                                 }
                             )
+                            }
                         }
+                    } else {
+                        item { GuidedEntrySummaryCard(guidedEntry) }
                     }
 
-                    repeatCandidate?.let { source ->
+                    if (guidedEntry == null) repeatCandidate?.let { source ->
                         item {
                             val sourceKind = inferQuickShiftKind(
                                 source.selectedRules.map { it.id }.toSet(),
@@ -601,7 +605,12 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (effectiveQuickMode && !isGiornaliero) {
+                    if (
+                        effectiveQuickMode &&
+                        !isGiornaliero &&
+                        guidedEntry?.isAbsence() != true &&
+                        guidedEntry != GuidedEntryKind.SECOND_MEZZO_GIORNALIERO
+                    ) {
                         item {
                             QuickShiftPanel(
                                 date = editorDate,
@@ -629,7 +638,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    preview?.let { pay ->
+                    if (guidedEntry == null) preview?.let { pay ->
                         item {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
@@ -663,7 +672,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (!effectiveQuickMode) {
+                    if (!effectiveQuickMode && guidedEntry == null) {
                         item {
                             val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
                             val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
@@ -788,7 +797,7 @@ internal fun ShiftEditorScreen(
                     }
                     }
 
-                    item {
+                    if (guidedEntry == null) item {
                         EditorSectionCard(title = "Mansione e note") {
                             if (recentRoleOptions.isNotEmpty()) {
                                 Text(
@@ -845,7 +854,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    item {
+                    if (guidedEntry == null) item {
                         PresetQuickBar(
                             rules = rules,
                             selectedIds = selectedIds,
@@ -875,6 +884,7 @@ internal fun ShiftEditorScreen(
                         .forEach { category ->
                         val categoryRules = manualRules
                             .filter { it.category == category }
+                            .filter { rule -> guidedEntry == null || guidedRuleVisible(guidedEntry, rule) }
                             .filterNot { rule ->
                                 isGiornaliero &&
                                     category == AllowanceCategory.MEZZO_TURNO &&
@@ -976,7 +986,38 @@ internal fun ShiftEditorScreen(
                         item { WarningPanel(message) }
                     }
 
-                    if (preview != null) {
+                    if (guidedEntry != null) {
+                        item {
+                            EditorSectionCard(title = "Note") {
+                                if (!showNotes) {
+                                    TextButton(onClick = { showNotes = true }) { Text("＋ Aggiungi note") }
+                                }
+                                AnimatedVisibility(
+                                    visible = showNotes,
+                                    enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+                                ) {
+                                    Column {
+                                        OutlinedTextField(
+                                            value = notes,
+                                            onValueChange = { notes = it },
+                                            label = { Text("Note") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            minLines = 2
+                                        )
+                                        TextButton(
+                                            onClick = {
+                                                notes = ""
+                                                showNotes = false
+                                            }
+                                        ) { Text("Rimuovi note") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (preview != null && guidedEntry == null) {
                         item {
                             TextButton(
                                 onClick = { showBreakdown = !showBreakdown },
@@ -987,7 +1028,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (preview != null) {
+                    if (preview != null && guidedEntry == null) {
                         item {
                             AnimatedVisibility(
                                 visible = showBreakdown,
