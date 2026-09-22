@@ -396,7 +396,10 @@ internal fun CalendarDay(
         animationSpec = tween(180),
         label = "Sfondo giorno selezionato"
     )
-    val visibleRows = dayRows.sortedBy { it.shift.startEpochMillis }.take(2)
+    val visibleRows = dayRows.sortedWith(
+            compareBy<ShiftWithPay> { it.shift.performanceType != PerformanceType.TURNO }
+                .thenBy { it.shift.startEpochMillis }
+        ).take(2)
 
     Surface(
         modifier = Modifier
