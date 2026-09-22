@@ -115,6 +115,8 @@ internal fun HomeScreen(repository: PortRepository) {
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var editorDate by remember { mutableStateOf<LocalDate?>(null) }
+    var pickerDate by remember { mutableStateOf<LocalDate?>(null) }
+    var guidedChoice by remember { mutableStateOf<GuidedEntryChoice?>(null) }
     var editingRow by remember { mutableStateOf<ShiftWithPay?>(null) }
     var detailRow by remember { mutableStateOf<ShiftWithPay?>(null) }
     var copyDraft by remember { mutableStateOf<Triple<ShiftWithPay, ShiftEntity, Set<Long>>?>(null) }
@@ -261,7 +263,7 @@ internal fun HomeScreen(repository: PortRepository) {
         ) {
             Button(
                 onClick = {
-                    runWithMonthConfirmation(selectedDate) { editorDate = selectedDate }
+                    runWithMonthConfirmation(selectedDate) { pickerDate = selectedDate }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -294,17 +296,46 @@ internal fun HomeScreen(repository: PortRepository) {
         )
     }
 
+    pickerDate?.let { date ->
+        val dateRows = rowsByDate[date].orEmpty()
+        val hasAbsence = dateRows.any { row ->
+            row.selectedRules.any { rule ->
+                rule.code in setOf("ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_CONGEDO", "AVV_INAIL", "AVV_DS")
+            }
+        }
+        val hasWorkedFirst = dateRows.any { row ->
+            row.shift.performanceType == PerformanceType.TURNO &&
+                row.selectedRules.none { it.code in setOf("ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_CONGEDO", "AVV_INAIL", "AVV_DS") }
+        }
+        val hasSecond = dateRows.any {
+            it.shift.performanceType == PerformanceType.DOPPIO ||
+                it.shift.performanceType == PerformanceType.MEZZO_DOPPIO
+        }
+        GuidedEntryPicker(
+            date = date,
+            dayState = guidedDayState(hasWorkedFirst, hasAbsence, hasSecond),
+            rules = rules,
+            onChoose = { choice ->
+                guidedChoice = choice
+                editorDate = date
+                pickerDate = null
+            },
+            onDismiss = { pickerDate = null }
+        )
+    }
+
     val worker = workers.firstOrNull()
-    if (editorDate != null && worker != null) {
+    if (editorDate != null && worker != null && guidedChoice != null) {
         ShiftEditorScreen(
             worker = worker,
             rules = rules,
             initialDate = editorDate!!,
             initialShift = null,
-            initialSelectedIds = emptySet(),
+            initialSelectedIds = guidedInitialRuleIds(guidedChoice!!, rules),
+            guidedChoice = guidedChoice,
             historyRows = historyRows,
             specialDays = specialDays,
-            onDismiss = { editorDate = null },
+            onDismiss = { editorDate = null; guidedChoice = null },
             onSave = { shifts, selectedIds ->
                 runCatching {
                     repository.addShiftsWithSelections(shifts, selectedIds)
