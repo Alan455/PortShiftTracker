@@ -213,7 +213,14 @@ internal fun HistoryScreen(repository: PortRepository) {
                 if (categoryRows.isNotEmpty()) {
                     item(key = "heading_${category.name}") {
                         Row(
-                            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .animateItem(
+                                    fadeInSpec = tween(180),
+                                    placementSpec = tween(220),
+                                    fadeOutSpec = tween(120)
+                                )
+                                .padding(top = 8.dp, bottom = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
