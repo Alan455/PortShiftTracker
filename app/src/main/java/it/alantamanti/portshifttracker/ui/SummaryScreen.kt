@@ -455,6 +455,7 @@ private fun SummaryBreakdownCard(
         .map { (key, lines) ->
             val rule = rulesById[key.first]
             SummaryOtherBreakdownItem(
+                ruleId = key.first,
                 label = rule?.name ?: key.second,
                 cents = lines.sumOf { it.amountCents },
                 priority = rule?.priority ?: Int.MAX_VALUE
@@ -512,7 +513,7 @@ private fun SummaryBreakdownCard(
                 }
 
                 otherRows.forEach { item ->
-                    key(item.label, item.priority) {
+                    key(item.ruleId, item.label) {
                         SummaryBreakdownRow(
                             label = item.label,
                             cents = item.cents,
@@ -604,6 +605,7 @@ private fun SummaryMotionBar(
 }
 
 private data class SummaryOtherBreakdownItem(
+    val ruleId: Long,
     val label: String,
     val cents: Long,
     val priority: Int
