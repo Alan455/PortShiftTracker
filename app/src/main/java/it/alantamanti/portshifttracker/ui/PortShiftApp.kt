@@ -1076,9 +1076,9 @@ internal fun RuleCard(
 @Composable
 internal fun RuleEditorDialog(
     initial: AllowanceRuleEntity?,
-    saveError: String? = null,
     onDismiss: () -> Unit,
-    onSave: (AllowanceRuleEntity) -> Unit
+    onSave: (AllowanceRuleEntity) -> Unit,
+    saveError: String? = null
 ) {
     var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
     var code by remember(initial) { mutableStateOf(initial?.code ?: "CUSTOM_${System.currentTimeMillis()}") }
