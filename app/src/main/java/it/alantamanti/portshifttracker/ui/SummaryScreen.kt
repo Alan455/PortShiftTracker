@@ -27,6 +27,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
@@ -65,10 +68,12 @@ import java.util.Locale
 @Composable
 internal fun SummaryScreen(repository: PortRepository) {
     val rules by repository.rules.collectAsState(initial = emptyList())
+    val workers by repository.workers.collectAsState(initial = emptyList())
     val context = LocalContext.current
     val featureStore = remember(context) { AppFeatureStore(context) }
     val payslips by featureStore.payslipsFlow.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val feedback = LocalShiftFeedback.current
 
     var month by remember { mutableStateOf(YearMonth.now()) }
     var showDetails by remember { mutableStateOf(false) }
@@ -96,6 +101,7 @@ internal fun SummaryScreen(repository: PortRepository) {
     val previousRows by previousRowsFlow.collectAsState(initial = emptyList())
 
     val total = monthRows.sumOf { it.pay.totalPayCents }
+    val irpefBasisPoints = workers.firstOrNull()?.irpefBasisPoints ?: 3000L
     val previousTotal = previousRows.sumOf { it.pay.totalPayCents }
     val daysWorked = monthRows.map(::rowDate).distinct().size
     val previousDaysWorked = previousRows.map(::rowDate).distinct().size
@@ -155,6 +161,38 @@ internal fun SummaryScreen(repository: PortRepository) {
                 month = month,
                 total = total,
                 previousTotal = previousTotal
+            )
+        }
+
+        item(key = "monthly_net") {
+            val selectedMonth = month
+            SummaryNetCard(
+                month = selectedMonth,
+                grossCents = total,
+                irpefBasisPoints = irpefBasisPoints,
+                manuallyEnteredCents = existingPayslip?.manualNetCents,
+                canUpdatePercentage = workers.firstOrNull() != null,
+                onSaveManualNet = { manualCents, recalibratedBasisPoints ->
+                    runCatching {
+                        // Preserve all the comparison fields and the locked flag.
+                        val current = featureStore.payslip(selectedMonth)
+                            ?: PayslipComparison(month = selectedMonth.toString())
+                        featureStore.savePayslip(current.copy(manualNetCents = manualCents))
+                        if (recalibratedBasisPoints != null) {
+                            workers.firstOrNull()?.let { worker ->
+                                repository.saveWorker(worker.copy(irpefBasisPoints = recalibratedBasisPoints))
+                            }
+                        }
+                    }.onSuccess {
+                        feedback.showSnackbar(
+                            if (manualCents == null) "Netto manuale rimosso."
+                            else "Netto salvato e percentuale stimata aggiornata.",
+                            duration = SnackbarDuration.Short
+                        )
+                    }.onFailure {
+                        feedback.showSnackbar("Salvataggio del netto non riuscito. Riprova.", duration = SnackbarDuration.Short)
+                    }.isSuccess
+                }
             )
         }
 
