@@ -183,14 +183,17 @@ internal fun SummaryScreen(repository: PortRepository) {
                                 repository.saveWorker(worker.copy(irpefBasisPoints = recalibratedBasisPoints))
                             }
                         }
-                    }.onSuccess {
-                        feedback.showSnackbar(
-                            if (manualCents == null) "Netto manuale rimosso."
-                            else "Netto salvato e percentuale stimata aggiornata.",
-                            duration = SnackbarDuration.Short
-                        )
-                    }.onFailure {
-                        feedback.showSnackbar("Salvataggio del netto non riuscito. Riprova.", duration = SnackbarDuration.Short)
+                    }.also { result ->
+                        // Showing a snackbar can suspend until it is dismissed:
+                        // do not keep the save button busy after persistence finishes.
+                        scope.launch {
+                            feedback.showSnackbar(
+                                if (result.isFailure) "Salvataggio del netto non riuscito. Riprova."
+                                else if (manualCents == null) "Netto manuale rimosso."
+                                else "Netto salvato e percentuale stimata aggiornata.",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
                     }.isSuccess
                 }
             )
