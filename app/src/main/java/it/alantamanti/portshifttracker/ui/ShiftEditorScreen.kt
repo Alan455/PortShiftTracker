@@ -950,6 +950,42 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
+                    if (guidedChoice == GuidedEntryChoice.ABS_IMA) {
+                        item {
+                            EditorSectionCard(title = "Indennità IMA (facoltativa)") {
+                                Text(
+                                    "Puoi scegliere Disdetta casa oppure Disdetta casa festiva, non entrambe.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                val disdettaCodes = setOf("AVV_DIS_CASA", "AVV_DIS_CASA_FEST")
+                                val options = rules.filter {
+                                    it.enabled && it.code in disdettaCodes &&
+                                        (it.performanceMask and PerformanceType.TURNO.maskBit) != 0
+                                }.sortedBy { it.code != "AVV_DIS_CASA" }
+                                options.forEach { option ->
+                                    FilterChip(
+                                        selected = option.id in selectedIds,
+                                        onClick = {
+                                            selectedIds = normalizeSelectedRuleIds(
+                                                performanceType,
+                                                if (option.id in selectedIds) selectedIds - option.id
+                                                else (selectedIds - options.map { it.id }.toSet()) + option.id,
+                                                rules
+                                            )
+                                        },
+                                        label = {
+                                            Text(if (option.code == "AVV_DIS_CASA") "Disdetta casa"
+                                                 else "Disdetta casa festiva")
+                                        }
+                                    )
+                                }
+                                if (options.isEmpty()) WarningPanel("Indennità di disdetta non disponibili nel catalogo.")
+                            }
+                        }
+                    }
+
                     if (initialShift == null) {
                         absenceRule?.let { selectedAbsence ->
                             item {
@@ -983,7 +1019,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (suggestedCompanions.isNotEmpty()) {
+                    if (!guidedAbsence && suggestedCompanions.isNotEmpty()) {
                         item {
                             EditorSectionCard(title = "Suggerite dalla selezione") {
                                 Text(
@@ -1026,7 +1062,7 @@ internal fun ShiftEditorScreen(
                         item { WarningPanel(message) }
                     }
 
-                    if (preview != null) {
+                    if (preview != null && !guidedAbsence) {
                         item {
                             TextButton(
                                 onClick = { showBreakdown = !showBreakdown },
@@ -1037,7 +1073,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (preview != null) {
+                    if (preview != null && !guidedAbsence) {
                         item {
                             AnimatedVisibility(
                                 visible = showBreakdown,
@@ -1051,6 +1087,34 @@ internal fun ShiftEditorScreen(
                                     }
                                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                                     BreakdownLine("Totale", preview.totalPayCents, bold = true, primary = true)
+                                }
+                            }
+                        }
+                    }
+
+                    if (guided) {
+                        item {
+                            EditorSectionCard(title = "Note") {
+                                if (!showNotes) {
+                                    TextButton(onClick = { showNotes = true }) { Text("＋ Aggiungi note") }
+                                }
+                                AnimatedVisibility(
+                                    visible = showNotes,
+                                    enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+                                ) {
+                                    Column {
+                                        OutlinedTextField(
+                                            value = notes,
+                                            onValueChange = { notes = it },
+                                            label = { Text("Note") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            minLines = 2
+                                        )
+                                        TextButton(onClick = { notes = ""; showNotes = false }) {
+                                            Text("Rimuovi note")
+                                        }
+                                    }
                                 }
                             }
                         }
