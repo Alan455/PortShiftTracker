@@ -47,7 +47,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -111,7 +110,7 @@ internal fun HomeScreen(repository: PortRepository) {
     val featureStore = remember(context) { AppFeatureStore(context) }
     val specialDays by featureStore.specialDaysFlow.collectAsState(initial = emptyList())
     val payslips by featureStore.payslipsFlow.collectAsState(initial = emptyList())
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarHostState = LocalShiftFeedback.current
 
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
@@ -274,12 +273,6 @@ internal fun HomeScreen(repository: PortRepository) {
             }
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 74.dp)
-        )
     }
 
     pendingLockedAction?.let { action ->
@@ -379,21 +372,28 @@ internal fun HomeScreen(repository: PortRepository) {
                 runWithMonthConfirmation(rowDate(row)) {
                     detailRow = null
                     scope.launch {
-                        repository.deleteShift(row.shift)
-                        val result = snackbarHostState.showSnackbar(
-                            message = "Prestazione eliminata",
-                            actionLabel = "Annulla",
-                            withDismissAction = true,
-                            duration = SnackbarDuration.Long
-                        )
-                        if (result == SnackbarResult.ActionPerformed) {
-                            runCatching {
-                                repository.restoreDeletedShift(
-                                    row.shift,
-                                    row.selectedRules.map { it.id }.toSet()
+                        runCatching { repository.deleteShift(row.shift) }
+                            .onSuccess {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "Prestazione eliminata",
+                                    actionLabel = "Annulla",
+                                    withDismissAction = true,
+                                    duration = SnackbarDuration.Long
                                 )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    runCatching {
+                                        repository.restoreDeletedShift(
+                                            row.shift,
+                                            row.selectedRules.map { it.id }.toSet()
+                                        )
+                                    }.onFailure {
+                                        snackbarHostState.showSnackbar("Ripristino non riuscito.")
+                                    }
+                                }
                             }
-                        }
+                            .onFailure {
+                                snackbarHostState.showSnackbar("Eliminazione non riuscita. Riprova.")
+                            }
                     }
                 }
             }
