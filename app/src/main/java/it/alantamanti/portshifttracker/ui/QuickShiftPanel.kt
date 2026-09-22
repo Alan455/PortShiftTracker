@@ -255,8 +255,11 @@ private fun QuickShiftTile(
                 rule?.let {
                     val amount = moneyQuick(it.value)
                     when {
-                        performanceType == PerformanceType.MEZZO_DOPPIO ->
+                        performanceType == PerformanceType.MEZZO_DOPPIO &&
+                            resolution.ruleCode in halfDoubleTurnAllowanceCodes ->
                             "+${moneyQuick((it.value / 2.0).roundToLong())}"
+                        performanceType == PerformanceType.MEZZO_DOPPIO ->
+                            "+$amount"
                         performanceType == PerformanceType.DOPPIO -> "+$amount"
                         kind == QuickShiftKind.GIORNALIERO -> "Base $amount"
                         else -> amount
