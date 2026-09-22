@@ -182,6 +182,17 @@ internal fun ShiftEditorScreen(
             it.applicationMode == AllowanceApplicationMode.MANUAL &&
             (it.performanceMask and performanceType.maskBit) != 0
     }
+    // The guided editor does not expose unrelated absences, manually selectable
+    // Mezza IMA or ONMezzo outside the first-turn Giornaliero branch.
+    val guidedVisibleRules = if (!guided) manualRules else manualRules.filter { rule ->
+        when {
+            guidedAbsence -> false // IMA disdetta has its own compact, exclusive picker.
+            rule.code in setOf("ALT_FERIE", "ALT_MALATTIA", "AVV_CONGEDO", "AVV_INAIL", "AVV_DS", "ALT_IMA", "ALT_MEZZA_IMA") -> false
+            rule.code == "DOP_ON_MEZZO" -> guidedChoice == GuidedEntryChoice.WORK_GIORNALIERO
+            rule.code == "DOP_TU_MEZZO" -> guidedChoice == GuidedEntryChoice.WORK_TURNO
+            else -> true
+        }
+    }
     val normalizedSelectedIds = normalizeSelectedRuleIds(performanceType, selectedIds, rules)
     LaunchedEffect(normalizedSelectedIds) {
         if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
@@ -211,7 +222,7 @@ internal fun ShiftEditorScreen(
             }
         } else null
     }
-    val suggestedCompanions = manualRules.filter { rule ->
+    val suggestedCompanions = guidedVisibleRules.filter { rule ->
         rule.id !in normalizedSelectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
     val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in normalizedSelectedIds })
@@ -287,17 +298,19 @@ internal fun ShiftEditorScreen(
                 bottomBar = {
                     Surface(color = Color.White, tonalElevation = 8.dp) {
                         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    preview?.let { money(animatedTotal.roundToLong()) } ?: "—",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                            if (!guidedAbsence) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        preview?.let { money(animatedTotal.roundToLong()) } ?: "—",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                             Button(
                                 onClick = {
@@ -887,14 +900,22 @@ internal fun ShiftEditorScreen(
                         )
                     }
 
-                    item {
+                    if (guidedChoice == GuidedEntryChoice.WORK_GIORNALIERO) {
+                        item { InfoPanel("Base €90 · Polivalenza automatica. ONMezzo è disponibile soltanto nel primo Giornaliero.") }
+                    }
+                    if (guidedChoice == GuidedEntryChoice.HALF_GIORNALIERO) {
+                        item { InfoPanel("Mezzo Giornaliero · Base €45 · Nessuna Mezza IMA o Polivalenza.") }
+                    }
+
+                    if (!guidedAbsence) item {
                         SectionHeader(
-                            title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
+                            title = if (guided) "Indennità compatibili"
+                            else if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
                             trailing = selectedSummary
                         )
                     }
 
-                    categoriesForPerformance(performanceType)
+                    if (!guidedAbsence) categoriesForPerformance(performanceType)
                         .filterNot { category ->
                             effectiveQuickMode && (
                                 category == AllowanceCategory.TURNO ||
@@ -902,7 +923,7 @@ internal fun ShiftEditorScreen(
                                 )
                         }
                         .forEach { category ->
-                        val categoryRules = manualRules
+                        val categoryRules = guidedVisibleRules
                             .filter { it.category == category }
                             .filterNot { rule ->
                                 isGiornaliero &&
@@ -920,7 +941,7 @@ internal fun ShiftEditorScreen(
                                     onToggle = { rule, checked ->
                                         selectedIds = normalizeSelectedRuleIds(
                                             performanceType,
-                                            toggleRule(selectedIds, rule, manualRules, checked),
+                                            toggleRule(selectedIds, rule, guidedVisibleRules, checked),
                                             rules
                                         )
                                     }
