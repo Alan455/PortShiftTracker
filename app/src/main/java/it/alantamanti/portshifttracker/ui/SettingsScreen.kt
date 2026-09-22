@@ -39,6 +39,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -106,7 +107,13 @@ internal fun SettingsScreen(repository: PortRepository) {
     var doubleBase by remember(worker?.id, worker?.doubleBaseCents) { mutableStateOf(worker?.doubleBaseCents?.toEuroText() ?: "88.40") }
     var irpef by remember(worker?.id, worker?.irpefBasisPoints) { mutableStateOf(worker?.irpefBasisPoints?.let { "%.2f".format(Locale.US, it / 100.0) } ?: "30.00") }
     var scatti by remember(worker?.id, worker?.senioritySteps) { mutableStateOf((worker?.senioritySteps ?: 3).toString()) }
-    var savedMessage by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val feedback = LocalShiftFeedback.current
+    fun showInvalidInput() {
+        scope.launch {
+            feedback.showSnackbar("Controlla gli importi e i parametri inseriti.", duration = SnackbarDuration.Short)
+        }
+    }
 
     val doubleCentsPreview = doubleBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: 8840
 
@@ -167,37 +174,56 @@ internal fun SettingsScreen(repository: PortRepository) {
         item { SpecialCalendarSettingsCard() }
         item { BackupSettingsCard(repository) }
 
-        savedMessage?.let { message ->
-            item { InfoPanel(message) }
-        }
-
         item {
             Button(
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !saving,
                 onClick = {
-                    val fixedCents = fixedBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val hourlyCents = hourlyRate.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val doubleCents = doubleBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val irpefBp = irpef.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: return@Button
-                    val stepCount = scatti.toIntOrNull() ?: return@Button
+                    val fixedCents = fixedBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: run {
+                        showInvalidInput()
+                        return@Button
+                    }
+                    val hourlyCents = hourlyRate.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: run {
+                        showInvalidInput()
+                        return@Button
+                    }
+                    val doubleCents = doubleBase.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: run {
+                        showInvalidInput()
+                        return@Button
+                    }
+                    val irpefBp = irpef.replace(',', '.').toDoubleOrNull()?.times(100)?.roundToLong() ?: run {
+                        showInvalidInput()
+                        return@Button
+                    }
+                    val stepCount = scatti.toIntOrNull() ?: run {
+                        showInvalidInput()
+                        return@Button
+                    }
+                    saving = true
                     scope.launch {
-                        repository.saveWorker(
-                            WorkerEntity(
-                                id = worker?.id ?: 0,
-                                name = name.ifBlank { "Lavoratore" },
-                                hourlyRateCents = hourlyCents,
-                                basePayMode = mode,
-                                baseShiftCents = fixedCents,
-                                doubleBaseCents = doubleCents,
-                                irpefBasisPoints = irpefBp,
-                                senioritySteps = stepCount
+                        val result = runCatching {
+                            repository.saveWorker(
+                                WorkerEntity(
+                                    id = worker?.id ?: 0,
+                                    name = name.ifBlank { "Lavoratore" },
+                                    hourlyRateCents = hourlyCents,
+                                    basePayMode = mode,
+                                    baseShiftCents = fixedCents,
+                                    doubleBaseCents = doubleCents,
+                                    irpefBasisPoints = irpefBp,
+                                    senioritySteps = stepCount
+                                )
                             )
+                        }
+                        saving = false
+                        feedback.showSnackbar(
+                            message = if (result.isSuccess) "Impostazioni salvate." else "Salvataggio non riuscito. Riprova.",
+                            duration = SnackbarDuration.Short
                         )
                     }
-                    savedMessage = "Impostazioni salvate."
                 }
             ) {
-                Text("Salva impostazioni")
+                Text(if (saving) "Salvataggio…" else "Salva impostazioni")
             }
         }
         item { Spacer(Modifier.height(8.dp)) }
