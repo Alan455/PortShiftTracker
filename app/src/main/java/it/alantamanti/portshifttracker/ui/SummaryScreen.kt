@@ -1,5 +1,14 @@
 package it.alantamanti.portshifttracker.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +34,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -233,11 +244,19 @@ private fun SummaryPeriodHeader(
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         TextButton(onClick = onPrevious) { Text("‹") }
-                        Text(
-                            italianTitle(month.format(monthFormatter)),
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        AnimatedContent(
+                            targetState = month,
+                            transitionSpec = {
+                                fadeIn(tween(200)) togetherWith fadeOut(tween(140))
+                            },
+                            label = "Periodo riepilogo"
+                        ) { displayedMonth ->
+                            Text(
+                                italianTitle(displayedMonth.format(monthFormatter)),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                         TextButton(onClick = onNext) { Text("›") }
                     }
                 }
@@ -295,12 +314,20 @@ private fun SummaryKpiCard(
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text(
-                value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            AnimatedContent(
+                targetState = value,
+                transitionSpec = {
+                    fadeIn(tween(220)) togetherWith fadeOut(tween(130))
+                },
+                label = "Valore indicatore riepilogo"
+            ) { displayedValue ->
+                Text(
+                    displayedValue,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
             Text(
                 delta.label,
                 style = MaterialTheme.typography.labelSmall,
@@ -352,12 +379,20 @@ private fun SummaryHeroTotal(
                     )
                 }
             }
-            Text(
-                money(total),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            AnimatedContent(
+                targetState = total,
+                transitionSpec = {
+                    fadeIn(tween(250)) togetherWith fadeOut(tween(150))
+                },
+                label = "Totale mese"
+            ) { displayedTotal ->
+                Text(
+                    money(displayedTotal),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Text(
                 "${delta.label} rispetto al mese precedente (${money(previousTotal)})",
                 style = MaterialTheme.typography.bodySmall,
