@@ -464,6 +464,157 @@ private fun SummaryHeroTotal(
 }
 
 @Composable
+private fun SummaryNetCard(
+    month: YearMonth,
+    grossCents: Long,
+    irpefBasisPoints: Long,
+    manuallyEnteredCents: Long?,
+    canUpdatePercentage: Boolean,
+    onSaveManualNet: suspend (Long?, Long?) -> Boolean
+) {
+    val validBasisPoints = irpefBasisPoints.coerceIn(0L, 10_000L)
+    val estimatedCents = estimatedNetCents(grossCents, validBasisPoints)
+    val estimatedWithholding = grossCents - estimatedCents
+    val percentLabel = "%.2f".format(Locale.ITALY, validBasisPoints / 100.0)
+    var isEditing by remember(month) { mutableStateOf(false) }
+    var saving by remember(month) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var manualInput by remember(month, manuallyEnteredCents) {
+        mutableStateOf(manuallyEnteredCents?.toEuroText().orEmpty())
+    }
+    val parsedManual = parseMonthlyNetCents(manualInput)
+    val updatedBasisPoints = parsedManual?.let { inferredWithholdingBasisPoints(grossCents, it) }
+    val manualValid = manualInput.isBlank() ||
+        (parsedManual != null && updatedBasisPoints != null && canUpdatePercentage)
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Netto del mese", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Trattenuta stimata ($percentLabel%)")
+                Text("- ${money(estimatedWithholding)}", color = MaterialTheme.colorScheme.error)
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Netto stimato", style = MaterialTheme.typography.labelLarge)
+                    AnimatedContent(
+                        targetState = estimatedCents,
+                        transitionSpec = {
+                            fadeIn(tween(220)) togetherWith fadeOut(tween(130))
+                        },
+                        label = "Netto mensile stimato"
+                    ) { shownCents ->
+                        Text(
+                            money(shownCents),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+            }
+            Text(
+                "Stima semplificata: il $percentLabel% è sottratto dal lordo del calendario. " +
+                    "Non è un calcolo fiscale della busta paga.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (manuallyEnteredCents != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Netto inserito dall'utente", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            money(manuallyEnteredCents),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            if (isEditing) {
+                OutlinedTextField(
+                    value = manualInput,
+                    onValueChange = { manualInput = it },
+                    label = { Text("Netto effettivo del mese (€)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = !manualValid,
+                    supportingText = {
+                        Text(
+                            when {
+                                manualInput.isBlank() ->
+                                    "Lascia vuoto e salva per eliminare il valore manuale; la percentuale resta invariata."
+                                parsedManual == null ->
+                                    "Inserisci un importo non negativo, con massimo due decimali."
+                                grossCents <= 0L ->
+                                    "Serve un lordo mensile maggiore di zero per aggiornare la percentuale."
+                                updatedBasisPoints == null ->
+                                    "Il netto deve essere compreso tra zero e il lordo, esclusi rimborsi e conguagli."
+                                !canUpdatePercentage ->
+                                    "Attendi il caricamento del profilo lavoratore."
+                                else ->
+                                    "Nuova percentuale stimata: " +
+                                        "%.2f".format(Locale.ITALY, updatedBasisPoints / 100.0) +
+                                        "%. Sarà usata anche per gli altri mesi."
+                            }
+                        )
+                    }
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = { isEditing = false },
+                        enabled = !saving
+                    ) { Text("Annulla") }
+                    Button(
+                        onClick = {
+                            saving = true
+                            scope.launch {
+                                val success = onSaveManualNet(parsedManual, updatedBasisPoints)
+                                saving = false
+                                if (success) isEditing = false
+                            }
+                        },
+                        enabled = manualValid && !saving
+                    ) {
+                        Text(
+                            when {
+                                saving -> "Salvataggio…"
+                                manualInput.isBlank() -> "Rimuovi netto manuale"
+                                else -> "Salva netto e aggiorna %"
+                            }
+                        )
+                    }
+                }
+            } else {
+                TextButton(onClick = { isEditing = true }) {
+                    Text(if (manuallyEnteredCents == null) "Inserisci netto manuale" else "Modifica netto manuale")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SummaryBreakdownCard(
     totals: MonthlyCategoryTotals,
     monthRows: List<ShiftWithPay>,
