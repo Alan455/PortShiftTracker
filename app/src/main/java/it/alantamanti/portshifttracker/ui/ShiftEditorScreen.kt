@@ -381,13 +381,23 @@ internal fun ShiftEditorScreen(
                                                 performanceType == PerformanceType.MEZZO_DOPPIO
                                         }
                                         val shape = RoundedCornerShape(14.dp)
+                                        val animatedBorder by animateColorAsState(
+                                            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                            animationSpec = tween(180),
+                                            label = "Bordo tipo prestazione"
+                                        )
+                                        val animatedBackground by animateColorAsState(
+                                            if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                            animationSpec = tween(180),
+                                            label = "Sfondo tipo prestazione"
+                                        )
                                         Surface(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .heightIn(min = 74.dp)
                                                 .border(
                                                     width = if (selected) 2.dp else 1.dp,
-                                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                                    color = animatedBorder,
                                                     shape = shape
                                                 )
                                                 .clickable {
@@ -470,7 +480,7 @@ internal fun ShiftEditorScreen(
                                                     }
                                                 },
                                             shape = shape,
-                                            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                            color = animatedBackground
                                         ) {
                                             Column(
                                                 Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
