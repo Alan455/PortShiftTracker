@@ -2,6 +2,12 @@ package it.alantamanti.portshifttracker.ui
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -274,20 +280,37 @@ internal fun MonthCalendarCard(
                 }
             }
 
-            cells.chunked(7).forEach { week ->
-                Row(Modifier.fillMaxWidth()) {
-                    week.forEach { date ->
-                        Box(
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (date != null) {
-                                CalendarDay(
-                                    date = date,
-                                    selected = date == selectedDate,
-                                    dayRows = rowsByDate[date].orEmpty(),
-                                    onClick = { onDateSelected(date) }
-                                )
+            AnimatedContent(
+                targetState = month,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(220)) togetherWith
+                        fadeOut(animationSpec = tween(160))
+                },
+                label = "Cambio mese calendario"
+            ) { displayedMonth ->
+                val offset = displayedMonth.atDay(1).dayOfWeek.value - 1
+                val count = offset + displayedMonth.lengthOfMonth()
+                val displayedWeeks = (count + 6) / 7
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    (0 until displayedWeeks * 7).map { index ->
+                        val day = index - offset + 1
+                        if (day in 1..displayedMonth.lengthOfMonth()) displayedMonth.atDay(day) else null
+                    }.chunked(7).forEach { week ->
+                        Row(Modifier.fillMaxWidth()) {
+                            week.forEach { date ->
+                                Box(
+                                    modifier = Modifier.weight(1f).height(44.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (date != null) {
+                                        CalendarDay(
+                                            date = date,
+                                            selected = date == selectedDate,
+                                            dayRows = rowsByDate[date].orEmpty(),
+                                            onClick = { onDateSelected(date) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -306,6 +329,20 @@ internal fun CalendarDay(
 ) {
     val today = date == LocalDate.now()
     val shape = RoundedCornerShape(10.dp)
+    val selectionColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = tween(180),
+        label = "Bordo giorno selezionato"
+    )
+    val cellColor by animateColorAsState(
+        targetValue = when {
+            selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            today -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            else -> Color.Transparent
+        },
+        animationSpec = tween(180),
+        label = "Sfondo giorno selezionato"
+    )
     val visibleRows = dayRows.sortedBy { it.shift.startEpochMillis }.take(2)
 
     Surface(
@@ -313,13 +350,10 @@ internal fun CalendarDay(
             .fillMaxWidth()
             .height(44.dp)
             .padding(horizontal = 2.dp)
-            .then(
-                if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
-                else Modifier
-            )
+            .border(2.dp, selectionColor, shape)
             .clickable(onClick = onClick),
         shape = shape,
-        color = if (today) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent
+        color = cellColor
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
