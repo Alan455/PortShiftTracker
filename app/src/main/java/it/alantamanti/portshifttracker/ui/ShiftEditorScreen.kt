@@ -926,9 +926,10 @@ internal fun ShiftEditorScreen(
                         val categoryRules = guidedVisibleRules
                             .filter { it.category == category }
                             .filterNot { rule ->
-                                isGiornaliero &&
-                                    category == AllowanceCategory.MEZZO_TURNO &&
-                                    rule.code != "DOP_ON_MEZZO"
+                                category == AllowanceCategory.MEZZO_TURNO && (
+                                    (isGiornaliero && rule.code != "DOP_ON_MEZZO") ||
+                                    (!isGiornaliero && rule.code == "DOP_ON_MEZZO")
+                                )
                             }
                         if (categoryRules.isNotEmpty()) {
                             item {
