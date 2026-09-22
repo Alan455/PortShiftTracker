@@ -142,7 +142,10 @@ internal fun HomeScreen(repository: PortRepository) {
     val historyRows by historyRowsFlow.collectAsState(initial = emptyList())
 
     val rowsByDate = remember(monthRows) { monthRows.groupBy(::rowDate) }
-    val dayRows = rowsByDate[selectedDate].orEmpty().sortedBy { it.shift.startEpochMillis }
+    val dayRows = rowsByDate[selectedDate].orEmpty().sortedWith(
+            compareBy<ShiftWithPay> { it.shift.performanceType != PerformanceType.TURNO }
+                .thenBy { it.shift.startEpochMillis }
+        )
     val monthTotal = monthRows.sumOf { it.pay.totalPayCents }
 
     fun isLocked(date: LocalDate): Boolean =
@@ -238,7 +241,10 @@ internal fun HomeScreen(repository: PortRepository) {
                     label = "Scheda giorno selezionato"
                 ) { date ->
                     val selectedRows = rowsByDate[date].orEmpty()
-                        .sortedBy { it.shift.startEpochMillis }
+                        .sortedWith(
+            compareBy<ShiftWithPay> { it.shift.performanceType != PerformanceType.TURNO }
+                .thenBy { it.shift.startEpochMillis }
+        )
                     if (selectedRows.isEmpty()) {
                         EmptyDayCard()
                     } else {
