@@ -1,15 +1,19 @@
 package it.alantamanti.portshifttracker.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.domain.PerformanceType
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * The first decision is made from the selected date, not from a manually
@@ -166,4 +171,71 @@ private fun EntryOption(icon: String, label: String, detail: String = "", onClic
             Text("›", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge)
         }
     }
+}
+
+/** One compact choice row, shown only for the work branches that need a shift. */
+@Composable
+internal fun GuidedShiftPicker(
+    date: LocalDate,
+    performanceType: PerformanceType,
+    specialDay: PortDayClass?,
+    rules: List<AllowanceRuleEntity>,
+    selected: QuickShiftKind?,
+    onSelect: (QuickShiftKind) -> Unit
+) {
+    val kinds = quickShiftKindsFor(performanceType).filter { it != QuickShiftKind.GIORNALIERO }
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Seleziona il turno", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                kinds.forEach { kind ->
+                    val resolution = resolveQuickShift(kind, date, specialDay, performanceType)
+                    val available = rules.any {
+                        it.enabled && it.code == resolution.ruleCode &&
+                            (it.performanceMask and performanceType.maskBit) != 0
+                    }
+                    FilterChip(
+                        selected = selected == kind,
+                        onClick = { onSelect(kind) },
+                        enabled = available,
+                        label = {
+                            Text(when (kind) {
+                                QuickShiftKind.MATTINA -> "M"
+                                QuickShiftKind.POMERIGGIO -> "P"
+                                QuickShiftKind.SERA -> "S"
+                                QuickShiftKind.SERA2 -> "S2"
+                                QuickShiftKind.NOTTE -> "N"
+                                QuickShiftKind.GIORNALIERO -> "G"
+                            })
+                        },
+                        modifier = Modifier.widthIn(min = 48.dp)
+                    )
+                }
+            }
+            if (selected != null) {
+                Text(
+                    resolveQuickShift(selected, date, specialDay, performanceType).explanation,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Internal nominal intervals used when the user picks a shift without the old
+ * time form. They preserve date attribution for overnight work and hour-based
+ * allowances. The date in the calendar is the start date of the shift.
+ */
+internal fun guidedShiftInterval(date: LocalDate, kind: QuickShiftKind): Pair<LocalDateTime, LocalDateTime> = when (kind) {
+    QuickShiftKind.MATTINA -> date.atTime(6, 30) to date.atTime(13, 0)
+    QuickShiftKind.POMERIGGIO -> date.atTime(13, 0) to date.atTime(19, 30)
+    QuickShiftKind.SERA -> date.atTime(19, 30) to date.plusDays(1).atTime(1, 0)
+    QuickShiftKind.SERA2 -> date.atTime(19, 30) to date.plusDays(1).atTime(2, 0)
+    QuickShiftKind.NOTTE -> date.atTime(1, 0) to date.atTime(6, 30)
+    QuickShiftKind.GIORNALIERO -> date.atTime(8, 0) to date.atTime(14, 0)
 }
