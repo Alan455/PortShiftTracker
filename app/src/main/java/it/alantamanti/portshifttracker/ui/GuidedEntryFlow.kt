@@ -1,5 +1,11 @@
 package it.alantamanti.portshifttracker.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.domain.PerformanceType
+import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -238,4 +245,54 @@ internal fun guidedShiftInterval(date: LocalDate, kind: QuickShiftKind): Pair<Lo
     QuickShiftKind.SERA2 -> date.atTime(19, 30) to date.plusDays(1).atTime(2, 0)
     QuickShiftKind.NOTTE -> date.atTime(1, 0) to date.atTime(6, 30)
     QuickShiftKind.GIORNALIERO -> date.atTime(8, 0) to date.atTime(14, 0)
+}
+
+/** Only category titles are shown until the user requests the options. */
+@Composable
+internal fun GuidedAllowanceGroup(
+    category: AllowanceCategory,
+    rules: List<AllowanceRuleEntity>,
+    selectedIds: Set<Long>,
+    performanceType: PerformanceType,
+    usageCounts: Map<Long, Int>,
+    onToggle: (AllowanceRuleEntity, Boolean) -> Unit
+) {
+    var expanded by remember(category, performanceType) { mutableStateOf(false) }
+    val selectedCount = rules.count { it.id in selectedIds }
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(categoryEditorTitle(category, performanceType), fontWeight = FontWeight.SemiBold)
+                    if (selectedCount > 0) {
+                        Text("$selectedCount selezionat${if (selectedCount == 1) "a" else "e"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Text(if (expanded) "⌃" else "⌄",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary)
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(tween(160)) + expandVertically(tween(210)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(160))
+            ) {
+                AllowanceCategoryCard(
+                    category = category,
+                    rules = rules,
+                    selectedIds = selectedIds,
+                    performanceType = performanceType,
+                    usageCounts = usageCounts,
+                    onToggle = onToggle
+                )
+            }
+        }
+    }
 }
