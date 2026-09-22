@@ -179,7 +179,7 @@ internal fun NewEntryDecisionFlow(
                         FlowChoice("2×", "Doppio completo", "Base intera · indennità turno intere", Color(0xFFE8EAF6)) {
                             onChosen(GuidedEntryKind.SECOND_DOPPIO)
                         }
-                        FlowChoice("½×", "Mezzo Doppio", "Base metà Doppio · sole indennità turno al 50%", Color(0xFFFFF3E0)) {
+                        FlowChoice("½×", "Mezzo Doppio", "Base metà Doppio · Pom/Sera/S2/Notte al 50%", Color(0xFFFFF3E0)) {
                             onChosen(GuidedEntryKind.SECOND_MEZZO_DOPPIO)
                         }
                         FlowChoice("½G", "Mezzo Giornaliero", "Base € 45,00 · nessuna Mezza IMA", Color(0xFFE1F6ED)) {
