@@ -156,6 +156,8 @@ internal fun ShiftEditorScreen(
     var saved by remember { mutableStateOf(false) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
+    var guidedAllowancesExpanded by remember(guidedEntry) { mutableStateOf(false) }
+    var guidedSuggestionsExpanded by remember(guidedEntry) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var quickKind by remember(
         initialShift?.id,
@@ -877,20 +879,25 @@ internal fun ShiftEditorScreen(
                         )
                     }
 
-                    if (guidedEntry == null || hasVisibleManualAllowances) {
+                    if (guidedEntry == null) {
                         item {
                             SectionHeader(
-                                title = if (guidedEntry == null) {
-                                    if (effectiveQuickMode) "2. Indennità" else "3. Indennità"
-                                } else {
-                                    "Indennità"
-                                },
+                                title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
                                 trailing = selectedSummary
+                            )
+                        }
+                    } else if (hasVisibleManualAllowances) {
+                        item {
+                            GuidedExpandableRow(
+                                title = "Indennità compatibili",
+                                trailing = selectedSummary,
+                                expanded = guidedAllowancesExpanded,
+                                onClick = { guidedAllowancesExpanded = !guidedAllowancesExpanded }
                             )
                         }
                     }
 
-                    if (guidedEntry == null || hasVisibleManualAllowances) {
+                    if (guidedEntry == null || (hasVisibleManualAllowances && guidedAllowancesExpanded)) {
                     categoriesForPerformance(performanceType)
                         .filterNot { category ->
                             effectiveQuickMode && (
@@ -962,27 +969,39 @@ internal fun ShiftEditorScreen(
                     }
 
                     if (suggestedCompanions.isNotEmpty()) {
-                        item {
-                            EditorSectionCard(title = "Suggerite dalla selezione") {
-                                Text(
-                                    "Puoi aggiungerle con un tocco.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (guidedEntry != null) {
+                            item {
+                                GuidedExpandableRow(
+                                    title = "Suggerimenti",
+                                    trailing = "${suggestedCompanions.size}",
+                                    expanded = guidedSuggestionsExpanded,
+                                    onClick = { guidedSuggestionsExpanded = !guidedSuggestionsExpanded }
                                 )
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    suggestedCompanions.take(6).forEach { rule ->
-                                        OutlinedButton(
-                                            onClick = { selectedIds = normalizeSelectedRuleIds(
-                                                performanceType,
-                                                toggleRule(selectedIds, rule, manualRules, true),
-                                                rules
-                                            ) }
-                                        ) {
-                                            Text("＋ ${rule.name}")
+                            }
+                        }
+                        if (guidedEntry == null || guidedSuggestionsExpanded) {
+                            item {
+                                EditorSectionCard(title = "Suggerite dalla selezione") {
+                                    Text(
+                                        "Puoi aggiungerle con un tocco.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(
+                                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        suggestedCompanions.take(6).forEach { rule ->
+                                            OutlinedButton(
+                                                onClick = { selectedIds = normalizeSelectedRuleIds(
+                                                    performanceType,
+                                                    toggleRule(selectedIds, rule, manualRules, true),
+                                                    rules
+                                                ) }
+                                            ) {
+                                                Text("＋ ${rule.name}")
+                                            }
                                         }
                                     }
                                 }
@@ -1071,6 +1090,41 @@ internal fun ShiftEditorScreen(
 }
 
 
+
+@Composable
+private fun GuidedExpandableRow(
+    title: String,
+    trailing: String?,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                trailing?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(if (expanded) "⌃" else "›", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
 
 @Composable
 private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
