@@ -3,6 +3,9 @@ package it.alantamanti.portshifttracker.ui
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -788,7 +791,11 @@ internal fun AllowanceCategoryCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                if (selectedCount > 0) {
+                AnimatedVisibility(
+                    visible = selectedCount > 0,
+                    enter = fadeIn(tween(150)),
+                    exit = fadeOut(tween(120))
+                ) {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = MaterialTheme.colorScheme.primaryContainer
@@ -861,17 +868,27 @@ internal fun AllowanceRuleTile(
     onToggle: (AllowanceRuleEntity, Boolean) -> Unit
 ) {
     val shape = RoundedCornerShape(14.dp)
+    val borderColor by animateColorAsState(
+        if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(180),
+        label = "Bordo indennità"
+    )
+    val tileColor by animateColorAsState(
+        if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        animationSpec = tween(180),
+        label = "Sfondo indennità"
+    )
     Surface(
         modifier = modifier
             .heightIn(min = 78.dp)
             .border(
                 width = if (checked) 2.dp else 1.dp,
-                color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                color = borderColor,
                 shape = shape
             )
             .clickable { onToggle(rule, !checked) },
         shape = shape,
-        color = if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        color = tileColor
     ) {
         Column(
             Modifier.padding(10.dp),
@@ -888,7 +905,11 @@ internal fun AllowanceRuleTile(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (checked) FontWeight.Bold else FontWeight.SemiBold
                 )
-                if (checked) {
+                AnimatedVisibility(
+                    visible = checked,
+                    enter = fadeIn(tween(150)),
+                    exit = fadeOut(tween(120))
+                ) {
                     Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             }
@@ -898,7 +919,11 @@ internal fun AllowanceRuleTile(
                 fontWeight = FontWeight.Bold,
                 color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
-            if (checked) {
+            AnimatedVisibility(
+                visible = checked,
+                enter = fadeIn(tween(170)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(170))
+            ) {
                 Text(
                     ruleDescription(rule),
                     style = MaterialTheme.typography.labelSmall,
