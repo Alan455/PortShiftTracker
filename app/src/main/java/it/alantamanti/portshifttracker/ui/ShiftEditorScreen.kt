@@ -370,6 +370,7 @@ internal fun ShiftEditorScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (!guided) {
                     item {
                         EditorSectionCard(title = "1. Tipo di prestazione") {
                             val choices = listOf(
@@ -541,8 +542,9 @@ internal fun ShiftEditorScreen(
                             )
                         }
                     }
+                    }
 
-                    repeatCandidate?.let { source ->
+                    if (!guided) repeatCandidate?.let { source ->
                         item {
                             val sourceKind = inferQuickShiftKind(
                                 source.selectedRules.map { it.id }.toSet(),
@@ -598,7 +600,37 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (effectiveQuickMode && !isGiornaliero) {
+                    if (guidedHasShiftPicker) {
+                        item {
+                            GuidedShiftPicker(
+                                date = editorDate,
+                                performanceType = performanceType,
+                                specialDay = specialOverrideClass,
+                                rules = rules,
+                                selected = quickKind,
+                                onSelect = { kind ->
+                                    val (start, end) = guidedShiftInterval(editorDate, kind)
+                                    startText = start.format(editFormatter)
+                                    endText = end.format(editFormatter)
+                                    quickKind = kind
+                                    selectedIds = normalizeSelectedRuleIds(
+                                        performanceType,
+                                        applyQuickTurnSelection(
+                                            currentIds = selectedIds,
+                                            rules = rules,
+                                            kind = kind,
+                                            date = editorDate,
+                                            overrideClass = specialOverrideClass,
+                                            performanceType = performanceType
+                                        ),
+                                        rules
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    if (!guided && effectiveQuickMode && !isGiornaliero) {
                         item {
                             QuickShiftPanel(
                                 date = editorDate,
@@ -626,7 +658,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    preview?.let { pay ->
+                    if (!guided) preview?.let { pay ->
                         item {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
@@ -785,7 +817,7 @@ internal fun ShiftEditorScreen(
                     }
                     }
 
-                    item {
+                    if (!guided) item {
                         EditorSectionCard(title = "Mansione e note") {
                             if (recentRoleOptions.isNotEmpty()) {
                                 Text(
@@ -842,7 +874,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    item {
+                    if (!guided) item {
                         PresetQuickBar(
                             rules = rules,
                             selectedIds = selectedIds,
