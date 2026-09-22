@@ -2,6 +2,14 @@ package it.alantamanti.portshifttracker.ui
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,6 +90,7 @@ import it.alantamanti.portshifttracker.domain.AllowanceCalculator
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.BasePayMode
 import it.alantamanti.portshifttracker.domain.PerformanceType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -132,6 +141,7 @@ internal fun ShiftEditorScreen(
     var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -209,6 +219,17 @@ internal fun ShiftEditorScreen(
             calculator.calculate(worker.toDomain(), it.toDomain(), rules.map { rule -> rule.toDomain() }, normalizedSelectedIds)
         }
     }.getOrNull()
+    val animatedTotal by animateFloatAsState(
+        targetValue = preview?.totalPayCents?.toFloat() ?: 0f,
+        animationSpec = tween(300),
+        label = "Totale provvisorio"
+    )
+    LaunchedEffect(saved) {
+        if (saved) {
+            delay(420)
+            onDismiss()
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -258,7 +279,7 @@ internal fun ShiftEditorScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    preview?.let { money(it.totalPayCents) } ?: "—",
+                                    preview?.let { money(animatedTotal.toLong()) } ?: "—",
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -293,7 +314,7 @@ internal fun ShiftEditorScreen(
                                             scope.launch {
                                                 val result = onSave(shiftsToSave, normalizedSelectedIds)
                                                 saving = false
-                                                result.onSuccess { onDismiss() }
+                                                result.onSuccess { saved = true }
                                                     .onFailure { failure ->
                                                         error = when (failure) {
                                                             is DuplicatePerformanceException ->
@@ -306,12 +327,13 @@ internal fun ShiftEditorScreen(
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = !saving && saveValidationMessage == null,
+                                enabled = !saving && !saved && saveValidationMessage == null,
                                 shape = RoundedCornerShape(14.dp)
                             ) {
                                 Text(
                                     when {
                                         saving -> "Salvataggio…"
+                                        saved -> "✓ Prestazione salvata"
                                         isCopy -> "Salva copia"
                                         initialShift != null -> "Salva modifiche"
                                         rangeEnabled -> "Salva periodo ${absenceRule.name}"
