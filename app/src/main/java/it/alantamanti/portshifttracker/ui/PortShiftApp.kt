@@ -1489,9 +1489,12 @@ internal fun ruleDescription(rule: AllowanceRuleEntity): String {
 internal fun ruleValueLabel(rule: AllowanceRuleEntity, performanceType: PerformanceType): String {
     if (rule.calculationType == AllowanceCalculationType.PERCENT_BASE) return "${rule.value / 100.0}%"
     if (rule.calculationType == AllowanceCalculationType.PER_HOUR) return "${money(rule.value)}/h"
-    val cents = if (performanceType == PerformanceType.MEZZO_DOPPIO && rule.category == AllowanceCategory.DOPPIO) {
-        (rule.value / 2.0).roundToLong()
-    } else rule.value
+    val cents = when {
+        rule.code == "DOP_ON_MEZZO" -> 4500L // half of the €90 Giornaliero
+        performanceType == PerformanceType.MEZZO_DOPPIO &&
+            rule.category == AllowanceCategory.DOPPIO -> (rule.value / 2.0).roundToLong()
+        else -> rule.value
+    }
     return money(cents)
 }
 
