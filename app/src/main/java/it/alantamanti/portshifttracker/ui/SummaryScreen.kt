@@ -116,8 +116,8 @@ internal fun SummaryScreen(repository: PortRepository) {
     val previousAverage = if (previousDaysWorked == 0) 0L else previousTotal / previousDaysWorked
     val groupedDays = monthRows.groupBy(::rowDate).toList().sortedByDescending { it.first }
     val totals = remember(monthRows, rules) { monthlyCategoryTotals(monthRows, rules) }
-    val categoryDetails = remember(monthRows, rules, totals) {
-        summaryCategoryDetails(monthRows, rules, totals)
+    val categoryDetails = remember(monthRows, rules) {
+        summaryCategoryDetails(monthRows, rules)
     }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(month) { selectedCategoryId = null }
@@ -644,6 +644,12 @@ private fun summaryCategoryColor(id: String): Color = when (id) {
     "disagio" -> Color(0xFFD95C69)
     "area" -> Color(0xFF7357D9)
     "doppio" -> Color(0xFFF2B01E)
+    "absence:ALT_MALATTIA" -> Color(0xFFDB5C75)
+    "absence:ALT_FERIE" -> Color(0xFF23A58B)
+    "absence:AVV_CONGEDO" -> Color(0xFF9870D9)
+    "absence:ALT_IMA" -> Color(0xFF4888BC)
+    "absence:AVV_DS" -> Color(0xFFD66C78)
+    "absence:AVV_INAIL" -> Color(0xFFAE7D4B)
     else -> Color(0xFF607D9B)
 }
 
