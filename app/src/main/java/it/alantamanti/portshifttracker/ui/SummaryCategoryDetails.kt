@@ -10,7 +10,8 @@ import it.alantamanti.portshifttracker.domain.AllowanceCategory
  */
 internal data class SummaryCategoryComponent(
     val label: String,
-    val cents: Long
+    val cents: Long,
+    val applications: Int = 0
 )
 
 internal data class SummaryCategoryDetail(
@@ -69,7 +70,7 @@ internal fun summaryCategoryDetails(
                 }
             }
             .map { (label, entries) ->
-                SummaryCategoryComponent(label, entries.sumOf { it.pay.basePayCents })
+                SummaryCategoryComponent(label, entries.sumOf { it.pay.basePayCents }, entries.size)
             }
             .filter { it.cents != 0L }
     )
@@ -90,8 +91,10 @@ internal fun summaryCategoryDetails(
             cents = amount,
             components = sortedComponents(
                 listOf(
-                    SummaryCategoryComponent("Base", baseAmount),
-                    SummaryCategoryComponent("Indennità $label", absenceAllowance)
+                    SummaryCategoryComponent("Base", baseAmount, matching.count { it.pay.basePayCents != 0L }),
+                    SummaryCategoryComponent("Indennità $label", absenceAllowance, matching.count { row ->
+                        row.pay.allowanceLines.any { line -> absenceRuleIds[line.ruleId] == code && line.amountCents != 0L }
+                    })
                 ).filter { it.cents != 0L }
             )
         )
@@ -108,15 +111,11 @@ internal fun summaryCategoryDetails(
             }
             .groupBy { line -> line.ruleId to (rulesById[line.ruleId]?.name ?: line.name) }
             .map { (identity, lines) ->
-                Triple(
-                    identity.second,
-                    lines.sumOf { it.amountCents },
-                    rulesById[identity.first]?.priority ?: Int.MAX_VALUE
-                )
+                Triple(identity.second, lines.sumOf { it.amountCents }, lines.count { it.amountCents != 0L })
             }
             .filter { it.second != 0L }
             .sortedWith(compareByDescending<Triple<String, Long, Int>> { it.second }.thenBy { it.first })
-            .map { SummaryCategoryComponent(it.first, it.second) }
+            .map { SummaryCategoryComponent(it.first, it.second, it.third) }
 
     val turno = componentsFor(AllowanceCategory.TURNO)
     val avviamento = componentsFor(AllowanceCategory.AVVIAMENTO)
@@ -149,18 +148,18 @@ internal fun summaryCategoryDetails(
             Triple(
                 identity,
                 lines.sumOf { it.amountCents },
-                rulesById[identity.first]?.priority ?: Int.MAX_VALUE
+                lines.count { it.amountCents != 0L }
             )
         }
         .filter { it.second != 0L }
         .sortedWith(compareByDescending<Triple<Pair<Long, String>, Long, Int>> { it.second }
             .thenBy { it.first.second })
-        .map { (identity, amount, _) ->
+        .map { (identity, amount, linesCount) ->
             SummaryCategoryDetail(
                 id = "other:${identity.first}:${identity.second}",
                 label = identity.second,
                 cents = amount,
-                components = listOf(SummaryCategoryComponent(identity.second, amount))
+                components = listOf(SummaryCategoryComponent(identity.second, amount, linesCount))
             )
         }
 
