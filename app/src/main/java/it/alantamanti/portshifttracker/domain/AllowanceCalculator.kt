@@ -81,6 +81,17 @@ class AllowanceCalculator {
             .sortedBy { it.priority }
             .toList()
 
+        // Congedo, Donazione sangue e INAIL sono assenze a importo unico:
+        // la loro tariffa sostituisce la base e non si sommano altre indennità
+        // (anche se vecchie selezioni o backup contengono voci aggiuntive).
+        // IMA resta una voce diversa: può avere Disdetta casa/festiva.
+        val exclusivePaidAbsence = applicableRules.firstOrNull {
+            it.code == "AVV_CONGEDO" || it.code == "AVV_DS" || it.code == "AVV_INAIL"
+        }
+        if (exclusivePaidAbsence != null) {
+            return PayBreakdown(totalMinutes, exclusivePaidAbsence.value, emptyList())
+        }
+
         // Ferie, Malattia, IMA e Giornaliero possono sostituire la base ordinaria.
         val replacementRule = applicableRules
             .filter { it.basePayEffect == BasePayEffect.REPLACE_BASE }
