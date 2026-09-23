@@ -115,6 +115,8 @@ internal fun HomeScreen(repository: PortRepository) {
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var editorDate by remember { mutableStateOf<LocalDate?>(null) }
+    var guidedEntry by remember { mutableStateOf<GuidedEntryKind?>(null) }
+    var newEntryFlowDate by remember { mutableStateOf<LocalDate?>(null) }
     var editingRow by remember { mutableStateOf<ShiftWithPay?>(null) }
     var detailRow by remember { mutableStateOf<ShiftWithPay?>(null) }
     var copyDraft by remember { mutableStateOf<Triple<ShiftWithPay, ShiftEntity, Set<Long>>?>(null) }
@@ -261,7 +263,7 @@ internal fun HomeScreen(repository: PortRepository) {
         ) {
             Button(
                 onClick = {
-                    runWithMonthConfirmation(selectedDate) { editorDate = selectedDate }
+                    runWithMonthConfirmation(selectedDate) { newEntryFlowDate = selectedDate }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -294,6 +296,19 @@ internal fun HomeScreen(repository: PortRepository) {
         )
     }
 
+    newEntryFlowDate?.let { flowDate ->
+        NewEntryDecisionFlow(
+            date = flowDate,
+            dayRows = rowsByDate[flowDate].orEmpty().sortedBy { it.shift.startEpochMillis },
+            onDismiss = { newEntryFlowDate = null },
+            onChosen = { choice ->
+                guidedEntry = choice
+                editorDate = flowDate
+                newEntryFlowDate = null
+            }
+        )
+    }
+
     val worker = workers.firstOrNull()
     if (editorDate != null && worker != null) {
         ShiftEditorScreen(
@@ -302,9 +317,13 @@ internal fun HomeScreen(repository: PortRepository) {
             initialDate = editorDate!!,
             initialShift = null,
             initialSelectedIds = emptySet(),
+            guidedEntry = guidedEntry,
             historyRows = historyRows,
             specialDays = specialDays,
-            onDismiss = { editorDate = null },
+            onDismiss = {
+                editorDate = null
+                guidedEntry = null
+            },
             onSave = { shifts, selectedIds ->
                 runCatching {
                     repository.addShiftsWithSelections(shifts, selectedIds)

@@ -117,6 +117,7 @@ internal fun ShiftEditorScreen(
     initialDate: LocalDate,
     initialShift: ShiftEntity?,
     initialSelectedIds: Set<Long>,
+    guidedEntry: GuidedEntryKind? = null,
     isCopy: Boolean = false,
     historyRows: List<ShiftWithPay>,
     specialDays: List<SpecialDayOverride>,
@@ -131,26 +132,46 @@ internal fun ShiftEditorScreen(
     val initialEnd = initialShift?.let {
         LocalDateTime.ofInstant(Instant.ofEpochMilli(it.endEpochMillis), initialZone)
     } ?: initialStart.plusHours(6)
+    val guidedInitialIds = remember(guidedEntry, rules) {
+        guidedEntry?.initialRuleCodes()
+            ?.mapNotNull { code -> rules.firstOrNull { it.enabled && it.code == code }?.id }
+            ?.toSet()
+            .orEmpty()
+    }
+    val guidedPerformanceType = guidedEntry?.initialPerformanceType()
 
     var startText by remember(initialShift?.id, initialDate) { mutableStateOf(initialStart.format(editFormatter)) }
     var endText by remember(initialShift?.id, initialDate) { mutableStateOf(initialEnd.format(editFormatter)) }
     var role by remember(initialShift?.id) { mutableStateOf(initialShift?.role ?: "Operatore") }
     var notes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes.orEmpty()) }
-    var performanceType by remember(initialShift?.id) { mutableStateOf(initialShift?.performanceType ?: PerformanceType.TURNO) }
-    var selectedIds by remember(initialShift?.id) { mutableStateOf(initialSelectedIds) }
+    var performanceType by remember(initialShift?.id, guidedEntry) {
+        mutableStateOf(guidedPerformanceType ?: initialShift?.performanceType ?: PerformanceType.TURNO)
+    }
+    var selectedIds by remember(initialShift?.id, guidedEntry, guidedInitialIds) {
+        mutableStateOf(if (guidedEntry != null) guidedInitialIds else initialSelectedIds)
+    }
     var rangeEndDate by remember(initialShift?.id, initialDate) { mutableStateOf(initialDate) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var showNotes by remember(initialShift?.id) { mutableStateOf(initialShift?.notes?.isNotBlank() == true) }
     var showBreakdown by remember(initialShift?.id) { mutableStateOf(false) }
+    var guidedAllowancesExpanded by remember(guidedEntry) { mutableStateOf(false) }
+    var guidedSuggestionsExpanded by remember(guidedEntry) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var quickKind by remember(initialShift?.id, initialSelectedIds, rules) {
+    var quickKind by remember(
+        initialShift?.id,
+        initialSelectedIds,
+        rules,
+        guidedEntry,
+        guidedInitialIds,
+        guidedPerformanceType
+    ) {
         mutableStateOf(
             inferQuickShiftKind(
-                initialSelectedIds,
+                if (guidedEntry != null) guidedInitialIds else initialSelectedIds,
                 rules,
-                initialShift?.performanceType ?: PerformanceType.TURNO
+                guidedPerformanceType ?: initialShift?.performanceType ?: PerformanceType.TURNO
             )
         )
     }
@@ -160,9 +181,12 @@ internal fun ShiftEditorScreen(
     val specialOverrideClass = specialDays.firstOrNull { it.epochDay == editorDate.toEpochDay() }
         ?.dayClass?.toPortDayClass()
     // Turno ordinario e Doppio usano sempre la selezione rapida basata sulla
-    // data scelta nel calendario. Solo il Mezzo Doppio mantiene data/orario.
+    // data scelta nel calendario. Nel nuovo flusso anche il Mezzo Doppio usa la scelta rapida.
     val effectiveQuickMode =
-        performanceType == PerformanceType.TURNO || performanceType == PerformanceType.DOPPIO
+        performanceType == PerformanceType.TURNO ||
+            performanceType == PerformanceType.DOPPIO ||
+            (guidedEntry == GuidedEntryKind.SECOND_MEZZO_DOPPIO &&
+                performanceType == PerformanceType.MEZZO_DOPPIO)
     val calculator = remember { AllowanceCalculator() }
 
     val manualRules = rules.filter {
@@ -181,6 +205,15 @@ internal fun ShiftEditorScreen(
         ruleUsageScores(historyRows, editorDate, performanceType, role)
     }
     val selectedSummary = selectionSummary(normalizedSelectedIds, rules, performanceType)
+    val guidedPrimarySelectionReady = when (guidedEntry) {
+        GuidedEntryKind.FIRST_TURNO,
+        GuidedEntryKind.SECOND_DOPPIO,
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> quickKind != null
+        else -> true
+    }
+    val hasVisibleManualAllowances = manualRules.any { rule ->
+        guidedEntry == null || guidedRuleVisible(guidedEntry, rule)
+    }
     val recentRoleOptions = remember(historyRows, editorDate) { recentRoles(historyRows, editorDate) }
     val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
         if (initialShift == null && !isCopy) lastRepeatCandidate(historyRows, editorDate) else null
@@ -199,7 +232,9 @@ internal fun ShiftEditorScreen(
         } else null
     }
     val suggestedCompanions = manualRules.filter { rule ->
-        rule.id !in normalizedSelectedIds && parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
+        (guidedEntry == null || guidedRuleVisible(guidedEntry, rule)) &&
+            rule.id !in normalizedSelectedIds &&
+            parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
     val coherenceWarnings = consistencyWarnings(performanceType, rules.filter { it.id in normalizedSelectedIds })
 
@@ -356,8 +391,9 @@ internal fun ShiftEditorScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    item {
-                        EditorSectionCard(title = "1. Tipo di prestazione") {
+                    if (guidedEntry == null) {
+                        item {
+                            EditorSectionCard(title = "1. Tipo di prestazione") {
                             val choices = listOf(
                                 EditorPerformanceChoice.TURNO,
                                 EditorPerformanceChoice.GIORNALIERO,
@@ -525,10 +561,13 @@ internal fun ShiftEditorScreen(
                                     else -> performanceInfo(worker, performanceType)
                                 }
                             )
+                            }
                         }
+                    } else {
+                        item { GuidedEntrySummaryCard(guidedEntry) }
                     }
 
-                    repeatCandidate?.let { source ->
+                    if (guidedEntry == null) repeatCandidate?.let { source ->
                         item {
                             val sourceKind = inferQuickShiftKind(
                                 source.selectedRules.map { it.id }.toSet(),
@@ -584,7 +623,12 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (effectiveQuickMode && !isGiornaliero) {
+                    if (
+                        effectiveQuickMode &&
+                        !isGiornaliero &&
+                        guidedEntry?.isAbsence() != true &&
+                        guidedEntry != GuidedEntryKind.SECOND_MEZZO_GIORNALIERO
+                    ) {
                         item {
                             QuickShiftPanel(
                                 date = editorDate,
@@ -595,6 +639,7 @@ internal fun ShiftEditorScreen(
                                 overrideClass = specialOverrideClass,
                                 onKindSelected = { kind ->
                                     quickKind = kind
+                                    if (guidedEntry != null) guidedAllowancesExpanded = true
                                     selectedIds = normalizeSelectedRuleIds(
                                         performanceType,
                                         applyQuickTurnSelection(
@@ -612,7 +657,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    preview?.let { pay ->
+                    if (guidedEntry == null) preview?.let { pay ->
                         item {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
@@ -646,7 +691,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (!effectiveQuickMode) {
+                    if (!effectiveQuickMode && guidedEntry == null) {
                         item {
                             val currentStart = runCatching { LocalDateTime.parse(startText, editFormatter) }.getOrDefault(initialStart)
                             val currentEnd = runCatching { LocalDateTime.parse(endText, editFormatter) }.getOrDefault(initialEnd)
@@ -771,7 +816,7 @@ internal fun ShiftEditorScreen(
                     }
                     }
 
-                    item {
+                    if (guidedEntry == null) item {
                         EditorSectionCard(title = "Mansione e note") {
                             if (recentRoleOptions.isNotEmpty()) {
                                 Text(
@@ -828,7 +873,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    item {
+                    if (guidedEntry == null) item {
                         PresetQuickBar(
                             rules = rules,
                             selectedIds = selectedIds,
@@ -841,13 +886,28 @@ internal fun ShiftEditorScreen(
                         )
                     }
 
-                    item {
-                        SectionHeader(
-                            title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
-                            trailing = selectedSummary
-                        )
+                    if (guidedEntry == null) {
+                        item {
+                            SectionHeader(
+                                title = if (effectiveQuickMode) "2. Indennità" else "3. Indennità",
+                                trailing = selectedSummary
+                            )
+                        }
+                    } else if (guidedPrimarySelectionReady && hasVisibleManualAllowances) {
+                        item {
+                            GuidedExpandableRow(
+                                title = "Indennità compatibili",
+                                trailing = selectedSummary,
+                                expanded = guidedAllowancesExpanded,
+                                onClick = { guidedAllowancesExpanded = !guidedAllowancesExpanded }
+                            )
+                        }
                     }
 
+                    if (
+                        guidedEntry == null ||
+                        (guidedPrimarySelectionReady && hasVisibleManualAllowances && guidedAllowancesExpanded)
+                    ) {
                     categoriesForPerformance(performanceType)
                         .filterNot { category ->
                             effectiveQuickMode && (
@@ -858,6 +918,7 @@ internal fun ShiftEditorScreen(
                         .forEach { category ->
                         val categoryRules = manualRules
                             .filter { it.category == category }
+                            .filter { rule -> guidedEntry == null || guidedRuleVisible(guidedEntry, rule) }
                             .filterNot { rule ->
                                 isGiornaliero &&
                                     category == AllowanceCategory.MEZZO_TURNO &&
@@ -871,6 +932,7 @@ internal fun ShiftEditorScreen(
                                     selectedIds = selectedIds,
                                     performanceType = performanceType,
                                     usageCounts = usageScores,
+                                    compactHorizontal = guidedEntry != null,
                                     onToggle = { rule, checked ->
                                         selectedIds = normalizeSelectedRuleIds(
                                             performanceType,
@@ -881,6 +943,7 @@ internal fun ShiftEditorScreen(
                                 )
                             }
                         }
+                    }
                     }
 
                     if (initialShift == null) {
@@ -916,28 +979,40 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (suggestedCompanions.isNotEmpty()) {
-                        item {
-                            EditorSectionCard(title = "Suggerite dalla selezione") {
-                                Text(
-                                    "Puoi aggiungerle con un tocco.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (guidedPrimarySelectionReady && suggestedCompanions.isNotEmpty()) {
+                        if (guidedEntry != null) {
+                            item {
+                                GuidedExpandableRow(
+                                    title = "Suggerimenti",
+                                    trailing = "${suggestedCompanions.size}",
+                                    expanded = guidedSuggestionsExpanded,
+                                    onClick = { guidedSuggestionsExpanded = !guidedSuggestionsExpanded }
                                 )
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    suggestedCompanions.take(6).forEach { rule ->
-                                        OutlinedButton(
-                                            onClick = { selectedIds = normalizeSelectedRuleIds(
-                                                performanceType,
-                                                toggleRule(selectedIds, rule, manualRules, true),
-                                                rules
-                                            ) }
-                                        ) {
-                                            Text("＋ ${rule.name}")
+                            }
+                        }
+                        if (guidedEntry == null || guidedSuggestionsExpanded) {
+                            item {
+                                EditorSectionCard(title = "Suggerite dalla selezione") {
+                                    Text(
+                                        "Puoi aggiungerle con un tocco.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(
+                                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        suggestedCompanions.take(6).forEach { rule ->
+                                            OutlinedButton(
+                                                onClick = { selectedIds = normalizeSelectedRuleIds(
+                                                    performanceType,
+                                                    toggleRule(selectedIds, rule, manualRules, true),
+                                                    rules
+                                                ) }
+                                            ) {
+                                                Text("＋ ${rule.name}")
+                                            }
                                         }
                                     }
                                 }
@@ -959,7 +1034,38 @@ internal fun ShiftEditorScreen(
                         item { WarningPanel(message) }
                     }
 
-                    if (preview != null) {
+                    if (guidedEntry != null) {
+                        item {
+                            EditorSectionCard(title = "Note") {
+                                if (!showNotes) {
+                                    TextButton(onClick = { showNotes = true }) { Text("＋ Aggiungi note") }
+                                }
+                                AnimatedVisibility(
+                                    visible = showNotes,
+                                    enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
+                                ) {
+                                    Column {
+                                        OutlinedTextField(
+                                            value = notes,
+                                            onValueChange = { notes = it },
+                                            label = { Text("Note") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            minLines = 2
+                                        )
+                                        TextButton(
+                                            onClick = {
+                                                notes = ""
+                                                showNotes = false
+                                            }
+                                        ) { Text("Rimuovi note") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (preview != null && guidedEntry == null) {
                         item {
                             TextButton(
                                 onClick = { showBreakdown = !showBreakdown },
@@ -970,7 +1076,7 @@ internal fun ShiftEditorScreen(
                         }
                     }
 
-                    if (preview != null) {
+                    if (preview != null && guidedEntry == null) {
                         item {
                             AnimatedVisibility(
                                 visible = showBreakdown,
@@ -995,6 +1101,114 @@ internal fun ShiftEditorScreen(
 }
 
 
+
+@Composable
+private fun GuidedExpandableRow(
+    title: String,
+    trailing: String?,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                trailing?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(if (expanded) "⌃" else "›", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
+    val (code, title, subtitle) = when (entry) {
+        GuidedEntryKind.FIRST_TURNO -> Triple("T", "Turno", "Scegli M, P, S, S2 o N")
+        GuidedEntryKind.FIRST_GIORNALIERO -> Triple("G", "Giornaliero", "Base € 90,00 · ONMezzo disponibile")
+        GuidedEntryKind.ABS_FERIE -> Triple("Ff", "Ferie", "Assenza")
+        GuidedEntryKind.ABS_MALATTIA -> Triple("Mm", "Malattia", "Assenza")
+        GuidedEntryKind.ABS_CONGEDO -> Triple("PC", "Congedo", "Assenza")
+        GuidedEntryKind.ABS_IMA -> Triple("I", "IMA", "Puoi scegliere Disdetta casa o festiva")
+        GuidedEntryKind.SECOND_DOPPIO -> Triple("2×", "Doppio completo", "Base e indennità turno intere")
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · Pom/Sera/S2/Notte al 50%")
+        GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "Mezzo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+            ) {
+                Text(
+                    code,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Column {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private val guidedAbsenceRuleCodes = setOf(
+    "ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_DS", "AVV_INAIL", "AVV_CONGEDO"
+)
+
+private fun guidedRuleVisible(entry: GuidedEntryKind, rule: AllowanceRuleEntity): Boolean = when (entry) {
+    GuidedEntryKind.FIRST_TURNO ->
+        rule.code !in guidedAbsenceRuleCodes &&
+            rule.code != "DOP_ON_MEZZO"
+
+    GuidedEntryKind.FIRST_GIORNALIERO ->
+        rule.code !in guidedAbsenceRuleCodes &&
+            rule.code != "DOP_TU_MEZZO"
+
+    GuidedEntryKind.ABS_IMA ->
+        rule.code == "AVV_DIS_CASA" || rule.code == "AVV_DIS_CASA_FEST"
+
+    GuidedEntryKind.ABS_FERIE,
+    GuidedEntryKind.ABS_MALATTIA,
+    GuidedEntryKind.ABS_CONGEDO -> false
+
+    GuidedEntryKind.SECOND_DOPPIO,
+    GuidedEntryKind.SECOND_MEZZO_DOPPIO,
+    GuidedEntryKind.SECOND_MEZZO_GIORNALIERO ->
+        rule.code !in guidedAbsenceRuleCodes &&
+            rule.code !in setOf("ALT_MEZZA_IMA", "ALT_POLIVALENZA", "DOP_TU_MEZZO", "DOP_ON_MEZZO")
+}
 
 @Composable
 private fun PreviewBreakdownRow(

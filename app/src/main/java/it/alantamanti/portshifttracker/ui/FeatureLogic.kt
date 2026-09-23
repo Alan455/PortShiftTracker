@@ -152,9 +152,11 @@ internal fun calendarDisplayLabel(row: ShiftWithPay): String = when (val code = 
     "Ds" -> "Donazione sangue"
     "PC" -> "Congedo"
     "II" -> "INAIL"
+    "½M" -> "Mezzo Doppio Mattina"
     "½P" -> "Mezzo Doppio Pomeriggio"
     "½S" -> "Mezzo Doppio Sera"
     "½S2" -> "Mezzo Doppio Sera 2"
+    "½N" -> "Mezzo Doppio Notte"
     else -> displayShiftLabel(row)
 }
 

@@ -39,16 +39,20 @@ class QuickShiftModeTest {
     }
 
     @Test
-    fun doppio_shows_pom_sera_sera2_and_half_giornaliero() {
-        assertEquals(
-            listOf(
-                QuickShiftKind.POMERIGGIO,
-                QuickShiftKind.SERA,
-                QuickShiftKind.SERA2,
-                QuickShiftKind.GIORNALIERO
-            ),
-            quickShiftKindsFor(PerformanceType.DOPPIO)
+    fun doppio_and_mezzo_doppio_offer_all_five_shift_kinds() {
+        val expected = listOf(
+            QuickShiftKind.MATTINA,
+            QuickShiftKind.POMERIGGIO,
+            QuickShiftKind.SERA,
+            QuickShiftKind.SERA2,
+            QuickShiftKind.NOTTE
         )
+        assertEquals(expected, quickShiftKindsFor(PerformanceType.DOPPIO))
+        assertEquals(expected, quickShiftKindsFor(PerformanceType.MEZZO_DOPPIO))
+    }
+
+    @Test
+    fun mezzo_giornaliero_remains_a_separate_doppio_choice() {
         val giornaliero = resolveQuickShift(
             QuickShiftKind.GIORNALIERO,
             LocalDate.of(2026, 9, 18),
@@ -56,6 +60,42 @@ class QuickShiftModeTest {
         )
         assertEquals("DOP_G", giornaliero.ruleCode)
         assertEquals("½G", giornaliero.compactCode)
+    }
+
+    @Test
+    fun doppio_mattina_and_notte_resolve_weekday_and_festive_codes() {
+        assertEquals(
+            "DOP_MAT",
+            resolveQuickShift(
+                QuickShiftKind.MATTINA,
+                LocalDate.of(2026, 9, 18),
+                performanceType = PerformanceType.DOPPIO
+            ).ruleCode
+        )
+        assertEquals(
+            "DOP_MATF",
+            resolveQuickShift(
+                QuickShiftKind.MATTINA,
+                LocalDate.of(2026, 9, 20),
+                performanceType = PerformanceType.DOPPIO
+            ).ruleCode
+        )
+        assertEquals(
+            "DOP_NOTTE",
+            resolveQuickShift(
+                QuickShiftKind.NOTTE,
+                LocalDate.of(2026, 9, 18),
+                performanceType = PerformanceType.DOPPIO
+            ).ruleCode
+        )
+        assertEquals(
+            "DOP_NOTTEF",
+            resolveQuickShift(
+                QuickShiftKind.NOTTE,
+                LocalDate.of(2026, 9, 20),
+                performanceType = PerformanceType.MEZZO_DOPPIO
+            ).ruleCode
+        )
     }
 
     @Test

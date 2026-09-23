@@ -16,6 +16,13 @@ internal enum class QuickShiftKind(val label: String) {
     GIORNALIERO("Giornaliero")
 }
 
+internal val halfDoubleTurnAllowanceCodes = setOf(
+    "DOP_POM", "DOP_POMS", "DOP_POMF",
+    "DOP_SERA", "DOP_SERAS", "DOP_SERAF",
+    "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2",
+    "DOP_NOTTE", "DOP_NOTTEF"
+)
+
 internal enum class PortDayClass(val label: String) {
     FERIALE("Feriale"),
     SABATO("Sabato"),
@@ -39,13 +46,14 @@ internal fun quickShiftKindsFor(performanceType: PerformanceType): List<QuickShi
         QuickShiftKind.SERA2,
         QuickShiftKind.NOTTE
     )
-    PerformanceType.DOPPIO -> listOf(
+    PerformanceType.DOPPIO,
+    PerformanceType.MEZZO_DOPPIO -> listOf(
+        QuickShiftKind.MATTINA,
         QuickShiftKind.POMERIGGIO,
         QuickShiftKind.SERA,
         QuickShiftKind.SERA2,
-        QuickShiftKind.GIORNALIERO
+        QuickShiftKind.NOTTE
     )
-    PerformanceType.MEZZO_DOPPIO -> emptyList()
 }
 
 /**
@@ -101,7 +109,11 @@ internal fun resolveQuickShift(
             QuickShiftKind.GIORNALIERO -> "G" to "G"
         }
 
-        PerformanceType.DOPPIO -> when (kind) {
+        PerformanceType.DOPPIO,
+        PerformanceType.MEZZO_DOPPIO -> when (kind) {
+            QuickShiftKind.MATTINA ->
+                if (festiveForAllowance) "DOP_MATF" to "MatF" else "DOP_MAT" to "Mat"
+
             QuickShiftKind.POMERIGGIO -> when {
                 festiveForAllowance -> "DOP_POMF" to "PomF"
                 effectiveClass == PortDayClass.SABATO -> "DOP_POMS" to "PomS"
@@ -120,14 +132,13 @@ internal fun resolveQuickShift(
                 else -> "DOP_SERA2" to "Sera2"
             }
 
-            QuickShiftKind.GIORNALIERO -> "DOP_G" to "½G"
+            QuickShiftKind.NOTTE ->
+                if (festiveForAllowance) "DOP_NOTTEF" to "NotteF" else "DOP_NOTTE" to "Notte"
 
-            QuickShiftKind.MATTINA, QuickShiftKind.NOTTE ->
-                error("${kind.label} non è previsto nell'inserimento rapido del Doppio")
+            QuickShiftKind.GIORNALIERO ->
+                if (performanceType == PerformanceType.DOPPIO) "DOP_G" to "½G"
+                else error("Mezzo Giornaliero non appartiene al Mezzo Doppio")
         }
-
-        PerformanceType.MEZZO_DOPPIO ->
-            error("Il Mezzo Doppio non usa l'inserimento rapido")
     }
 
     val prefix = if (overrideClass != null) "Calendario speciale: " else ""
@@ -154,8 +165,6 @@ internal fun applyQuickTurnSelection(
     overrideClass: PortDayClass? = null,
     performanceType: PerformanceType = PerformanceType.TURNO
 ): Set<Long> {
-    if (performanceType == PerformanceType.MEZZO_DOPPIO) return currentIds
-
     val resolution = resolveQuickShift(kind, date, overrideClass, performanceType)
     val target = rules.firstOrNull {
         it.enabled &&
@@ -165,8 +174,8 @@ internal fun applyQuickTurnSelection(
 
     val groupName = when (performanceType) {
         PerformanceType.TURNO -> "TIPO_TURNO"
-        PerformanceType.DOPPIO -> "DOPPIO"
-        PerformanceType.MEZZO_DOPPIO -> return currentIds
+        PerformanceType.DOPPIO,
+        PerformanceType.MEZZO_DOPPIO -> "DOPPIO"
     }
     val groupIds = rules.asSequence()
         .filter { it.exclusiveGroup == groupName && (it.performanceMask and performanceType.maskBit) != 0 }
@@ -183,8 +192,8 @@ internal fun inferQuickShiftKind(
 ): QuickShiftKind? {
     val groupName = when (performanceType) {
         PerformanceType.TURNO -> "TIPO_TURNO"
-        PerformanceType.DOPPIO -> "DOPPIO"
-        PerformanceType.MEZZO_DOPPIO -> return null
+        PerformanceType.DOPPIO,
+        PerformanceType.MEZZO_DOPPIO -> "DOPPIO"
     }
     val code = rules.firstOrNull {
         it.id in selectedIds &&
@@ -193,11 +202,11 @@ internal fun inferQuickShiftKind(
     }?.code ?: return null
 
     return when (code) {
-        "MAT", "MATF" -> QuickShiftKind.MATTINA
+        "MAT", "MATF", "DOP_MAT", "DOP_MATF" -> QuickShiftKind.MATTINA
         "POM", "POMS", "POMF", "DOP_POM", "DOP_POMS", "DOP_POMF" -> QuickShiftKind.POMERIGGIO
         "SERA", "SERAS", "SERAF", "DOP_SERA", "DOP_SERAS", "DOP_SERAF" -> QuickShiftKind.SERA
         "SERA2", "SERAS2", "SERAF2", "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2" -> QuickShiftKind.SERA2
-        "NOTTE", "NOTTEF" -> QuickShiftKind.NOTTE
+        "NOTTE", "NOTTEF", "DOP_NOTTE", "DOP_NOTTEF" -> QuickShiftKind.NOTTE
         "G", "DOP_G" -> QuickShiftKind.GIORNALIERO
         else -> null
     }

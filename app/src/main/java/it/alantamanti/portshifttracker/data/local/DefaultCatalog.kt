@@ -37,12 +37,12 @@ object DefaultCatalog {
         add(fixed("AVV_MEZZO_PRIMO", "MezzoPrimo", 0, AllowanceCategory.AVVIAMENTO, 101, enabled = false))
         add(hourly("AVV_FUORI_ORARIO_H", "FuoriOrario/h", 775, AllowanceCategory.AVVIAMENTO, 102))
         add(fixed("AVV_AFF_RE", "Aff.re", 500, AllowanceCategory.AVVIAMENTO, 103))
-        add(fixed("AVV_DIS_CASA_FEST", "Dis.Casa.Fest", 1500, AllowanceCategory.AVVIAMENTO, 104))
+        add(fixed("AVV_DIS_CASA_FEST", "Disdetta casa festiva", 1500, AllowanceCategory.AVVIAMENTO, 104, group = "IMA_DISDETTA"))
         add(fixed("AVV_MEZZO_DOPPIO", "MezzoDoppio (legacy)", 0, AllowanceCategory.AVVIAMENTO, 105, enabled = false, performanceMask = PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("AVV_UN_ORA_PRIMA", "UnOraPrima", 1000, AllowanceCategory.AVVIAMENTO, 106))
         add(fixed("AVV_NO_SOST", "NoSost", 1500, AllowanceCategory.AVVIAMENTO, 107))
         add(fixed("AVV_DISD_POSTO", "Disd.Posto", 1250, AllowanceCategory.AVVIAMENTO, 108))
-        add(fixed("AVV_DIS_CASA", "Dis.Casa", 1000, AllowanceCategory.AVVIAMENTO, 109))
+        add(fixed("AVV_DIS_CASA", "Disdetta casa", 1000, AllowanceCategory.AVVIAMENTO, 109, group = "IMA_DISDETTA"))
         add(fixed("AVV_CHIAMATA_CASA", "ChiamataCasa", 516, AllowanceCategory.AVVIAMENTO, 110))
         add(fixed("AVV_RE", "Re", 0, AllowanceCategory.AVVIAMENTO, 116, enabled = false))
         add(fixed("AVV_RP", "Rp", 0, AllowanceCategory.AVVIAMENTO, 117, enabled = false))
@@ -81,7 +81,10 @@ object DefaultCatalog {
         add(fixed("AREA_G3", "G3", 1930, AllowanceCategory.AREA, 314, group = "AREA"))
         add(fixed("AREA_U", "U", 570, AllowanceCategory.AREA, 315, group = "AREA"))
 
-        // DOPPI
+        // DOPPI. Le stesse indennità valgono per Doppio completo e Mezzo Doppio;
+        // nel Mezzo Doppio il calcolatore dimezza solo queste voci di categoria DOPPIO.
+        add(fixed("DOP_MAT", "Mat", 0, AllowanceCategory.DOPPIO, 398, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_MATF", "MatF", 4793, AllowanceCategory.DOPPIO, 399, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_POM", "Pom", 0, AllowanceCategory.DOPPIO, 400, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAS", "SeraS", 1562, AllowanceCategory.DOPPIO, 401, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_POMS", "PomS", 1136, AllowanceCategory.DOPPIO, 402, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
@@ -91,6 +94,8 @@ object DefaultCatalog {
         add(fixed("DOP_SERAS2", "SeraS2", 2462, AllowanceCategory.DOPPIO, 406, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAF", "SeraF", 5219, AllowanceCategory.DOPPIO, 407, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_SERAF2", "SeraF2", 6119, AllowanceCategory.DOPPIO, 408, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_NOTTE", "Notte", 1136, AllowanceCategory.DOPPIO, 4081, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
+        add(fixed("DOP_NOTTEF", "NotteF", 5645, AllowanceCategory.DOPPIO, 4082, group = "DOPPIO", performanceMask = PerformanceType.DOPPIO.maskBit or PerformanceType.MEZZO_DOPPIO.maskBit))
         add(fixed("DOP_G", "Mezzo Giornaliero", 4500, AllowanceCategory.DOPPIO, 409, group = "DOPPIO", basePayEffect = BasePayEffect.REPLACE_BASE, performanceMask = PerformanceType.DOPPIO.maskBit))
         add(fixed(
             "DOP_TU_MEZZO", "TUMezzo", 3390, AllowanceCategory.MEZZO_TURNO, 410,

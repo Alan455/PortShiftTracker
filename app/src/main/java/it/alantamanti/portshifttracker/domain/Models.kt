@@ -8,7 +8,7 @@ enum class BasePayMode {
 enum class PerformanceType(val maskBit: Int) {
     TURNO(1),
     DOPPIO(2),
-    /** Mezzo Doppio: 50% della base Doppio, indennità Doppio al 50%, Area/Disagi interi. */
+    /** Mezzo Doppio: 50% della base Doppio; solo Pom/Sera/Sera2/Notte e relative varianti al 50%. */
     MEZZO_DOPPIO(4)
 }
 
