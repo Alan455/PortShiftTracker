@@ -34,8 +34,7 @@ private fun sortedComponents(components: List<SummaryCategoryComponent>) =
 
 internal fun summaryCategoryDetails(
     rows: List<ShiftWithPay>,
-    rules: List<AllowanceRuleEntity>,
-    totals: MonthlyCategoryTotals = monthlyCategoryTotals(rows, rules)
+    rules: List<AllowanceRuleEntity>
 ): List<SummaryCategoryDetail> {
     val rulesById = rules.associateBy { it.id }
 
