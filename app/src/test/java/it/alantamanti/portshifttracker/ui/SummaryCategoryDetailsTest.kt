@@ -139,6 +139,20 @@ class SummaryCategoryDetailsTest {
     }
 
     @Test
+    fun legacyCongedoInAvviamentoIsMovedIntoItsOwnAbsenceCategory() {
+        val congedo = rule(40, "AVV_CONGEDO", "Congedo", AllowanceCategory.AVVIAMENTO)
+        val rows = listOf(
+            row(base = 6_000, lines = listOf(AllowanceLine(40, "Congedo", 60, 3_000)),
+                selected = listOf(congedo))
+        )
+        val categories = summaryCategoryDetails(rows, listOf(congedo))
+        assertEquals(0L, categories.single { it.id == "base" }.cents)
+        assertEquals(0L, categories.single { it.id == "avviamento" }.cents)
+        assertEquals(9_000L, categories.single { it.label == "Congedo" }.cents)
+        assertEquals(rows.sumOf { it.pay.totalPayCents }, categories.sumOf { it.cents })
+    }
+
+    @Test
     fun categoriesAndPopupComponentsAreSortedByDescendingAmount() {
         val q2 = rule(30, "Q2", "Q2", AllowanceCategory.AREA)
         val h = rule(31, "H", "H", AllowanceCategory.AREA)
