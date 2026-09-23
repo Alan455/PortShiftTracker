@@ -268,7 +268,7 @@ class AllowanceCalculatorTest {
     }
 
     @Test
-    fun mezzoDoppioNonDimezzaMattinaFestiva() {
+    fun mezzoDoppioDimezzaAncheMattinaFestiva() {
         val mattinaFestivaDoppio = AllowanceRule(
             id = 20,
             name = "MatF Doppio",
@@ -288,7 +288,7 @@ class AllowanceCalculatorTest {
         )
 
         assertEquals(4420, pay.basePayCents)
-        assertTrue(pay.allowanceLines.any { it.name == "MatF Doppio" && it.amountCents == 4793L })
+        assertTrue(pay.allowanceLines.any { it.name == "MatF Doppio" && it.amountCents == 2397L })
         assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
         assertTrue(pay.allowanceLines.any { it.name == "Tubi" && it.amountCents == 775L })
         assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
