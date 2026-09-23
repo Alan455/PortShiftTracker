@@ -11,6 +11,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,10 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.data.local.AppFeatureStore
@@ -109,6 +116,11 @@ internal fun SummaryScreen(repository: PortRepository) {
     val previousAverage = if (previousDaysWorked == 0) 0L else previousTotal / previousDaysWorked
     val groupedDays = monthRows.groupBy(::rowDate).toList().sortedByDescending { it.first }
     val totals = remember(monthRows, rules) { monthlyCategoryTotals(monthRows, rules) }
+    val categoryDetails = remember(monthRows, rules, totals) {
+        summaryCategoryDetails(monthRows, rules, totals)
+    }
+    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(month) { selectedCategoryId = null }
     val existingPayslip = payslips.firstOrNull { it.month == month.toString() }
     val isLocked = existingPayslip?.locked == true
 
@@ -201,9 +213,9 @@ internal fun SummaryScreen(repository: PortRepository) {
 
         item {
             SummaryBreakdownCard(
-                totals = totals,
-                monthRows = monthRows,
-                rules = rules
+                total = totals.total,
+                categories = categoryDetails,
+                onCategoryClick = { selectedCategoryId = it.id }
             )
         }
 
@@ -272,6 +284,14 @@ internal fun SummaryScreen(repository: PortRepository) {
                 }
             }
         }
+    }
+
+    categoryDetails.firstOrNull { it.id == selectedCategoryId }?.let { selected ->
+        SummaryCategorySheet(
+            detail = selected,
+            color = summaryCategoryColor(selected.id),
+            onDismiss = { selectedCategoryId = null }
+        )
     }
 }
 
@@ -617,101 +637,46 @@ private fun SummaryNetCard(
     }
 }
 
+private fun summaryCategoryColor(id: String): Color = when (id) {
+    "base" -> Color(0xFF2D7FF9)
+    "turno" -> Color(0xFF159A80)
+    "avviamento" -> Color(0xFFE17932)
+    "disagio" -> Color(0xFFD95C69)
+    "area" -> Color(0xFF7357D9)
+    "doppio" -> Color(0xFFF2B01E)
+    else -> Color(0xFF607D9B)
+}
+
 @Composable
 private fun SummaryBreakdownCard(
-    totals: MonthlyCategoryTotals,
-    monthRows: List<ShiftWithPay>,
-    rules: List<AllowanceRuleEntity>
+    total: Long,
+    categories: List<SummaryCategoryDetail>,
+    onCategoryClick: (SummaryCategoryDetail) -> Unit
 ) {
-    val categoryRows = listOf(
-        SummaryBreakdownItem("Base", totals.base, Color(0xFF2D7FF9)),
-        SummaryBreakdownItem("Turno", totals.turno, Color(0xFF159A80)),
-        SummaryBreakdownItem("Avviamento", totals.avviamento, Color(0xFFE17932)),
-        SummaryBreakdownItem("Disagi", totals.disagio, Color(0xFFD95C69)),
-        SummaryBreakdownItem("Area", totals.area, Color(0xFF7357D9)),
-        SummaryBreakdownItem("Doppio", totals.doppio, Color(0xFFF2B01E))
-    )
-
-    val rulesById = rules.associateBy { it.id }
-    val otherRows = monthRows
-        .flatMap { it.pay.allowanceLines }
-        .filter { line ->
-            when (rulesById[line.ruleId]?.category) {
-                AllowanceCategory.ALTRE_VOCI,
-                AllowanceCategory.ALTRO,
-                null -> true
-                else -> false
-            }
-        }
-        .groupBy { it.ruleId to it.name }
-        .map { (key, lines) ->
-            val rule = rulesById[key.first]
-            SummaryOtherBreakdownItem(
-                ruleId = key.first,
-                label = rule?.name ?: key.second,
-                cents = lines.sumOf { it.amountCents },
-                priority = rule?.priority ?: Int.MAX_VALUE
-            )
-        }
-        .filter { it.cents != 0L }
-        .sortedWith(
-            compareBy<SummaryOtherBreakdownItem> { it.priority }
-                .thenBy { it.label }
-        )
-
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(18.dp)
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
-        ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
             Text(
                 "Dettaglio per categoria",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-
-            categoryRows.forEach { item ->
-                key(item.label) {
+            Spacer(Modifier.height(6.dp))
+            categories.forEachIndexed { index, item ->
+                key(item.id) {
                     SummaryBreakdownRow(
                         label = item.label,
                         cents = item.cents,
-                        total = totals.total,
-                        color = item.color
+                        total = total,
+                        color = summaryCategoryColor(item.id),
+                        onClick = { onCategoryClick(item) }
                     )
-                }
-            }
-
-            if (otherRows.isNotEmpty()) {
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Altre voci",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        money(otherRows.sumOf { it.cents }),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                otherRows.forEach { item ->
-                    key(item.ruleId, item.label) {
-                        SummaryBreakdownRow(
-                            label = item.label,
-                            cents = item.cents,
-                            total = totals.total,
-                            color = Color(0xFF607D9B),
-                            nested = true
+                    if (index < categories.lastIndex) {
+                        HorizontalDivider(
+                            color = Color(0xFFE9EFF7),
+                            thickness = 0.6.dp
                         )
                     }
                 }
@@ -726,51 +691,167 @@ private fun SummaryBreakdownRow(
     cents: Long,
     total: Long,
     color: Color,
-    nested: Boolean = false
+    onClick: () -> Unit
 ) {
     val denominator = total.coerceAtLeast(1L)
     val ratio = (cents.toFloat() / denominator.toFloat()).coerceIn(0f, 1f)
 
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Spacer(
-            Modifier
-                .size(if (nested) 7.dp else 9.dp)
-                .background(
-                    if (nested) color.copy(alpha = 0.72f) else color,
-                    CircleShape
-                )
-        )
+        Spacer(Modifier.size(10.dp).background(color, CircleShape))
         Text(
-            label,
-            modifier = Modifier.width(96.dp),
-            style = if (nested) MaterialTheme.typography.labelMedium
-            else MaterialTheme.typography.bodySmall,
-            color = if (nested) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.onSurface
+            text = label,
+            modifier = Modifier.width(84.dp),
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         SummaryMotionBar(
             targetProgress = ratio,
-            modifier = Modifier.weight(1f).height(if (nested) 5.dp else 7.dp),
+            modifier = Modifier.weight(1f).height(7.dp),
             color = color
         )
         Text(
             money(cents),
-            modifier = Modifier.width(72.dp),
+            modifier = Modifier.width(76.dp),
             textAlign = TextAlign.End,
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
         )
         Text(
             summaryPercent(cents, total),
-            modifier = Modifier.width(38.dp),
+            modifier = Modifier.width(30.dp),
             textAlign = TextAlign.End,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Text(
+            "›",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SummaryCategorySheet(
+    detail: SummaryCategoryDetail,
+    color: Color,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color.White,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Composizione categoria",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        "×",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Spacer(Modifier.size(17.dp).background(color, CircleShape))
+                Text(
+                    detail.label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    money(detail.cents),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            HorizontalDivider(color = Color(0xFFE6EDF7))
+            if (detail.components.isEmpty()) {
+                Text(
+                    "Nessun importo registrato per questa categoria nel mese.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                detail.components.forEachIndexed { index, component ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            component.label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            money(component.cents),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    if (index < detail.components.lastIndex) {
+                        HorizontalDivider(color = Color(0xFFE9EFF7))
+                    }
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Surface(
+                color = Color(0xFFF0F5FF),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Totale categoria",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        money(detail.cents),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -795,13 +876,6 @@ private fun SummaryMotionBar(
         trackColor = MaterialTheme.colorScheme.surfaceVariant
     )
 }
-
-private data class SummaryOtherBreakdownItem(
-    val ruleId: Long,
-    val label: String,
-    val cents: Long,
-    val priority: Int
-)
 
 @Composable
 private fun SummaryMonthTrendCard(
