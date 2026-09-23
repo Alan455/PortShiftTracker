@@ -1127,7 +1127,10 @@ internal fun RuleEditorDialog(
 ) {
     var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
     var code by remember(initial) { mutableStateOf(initial?.code ?: "CUSTOM_${System.currentTimeMillis()}") }
-    var type by remember(initial) { mutableStateOf(initial?.calculationType ?: AllowanceCalculationType.FIXED_PER_SHIFT) }
+    var type by remember(initial) {
+        mutableStateOf(initial?.calculationType?.takeUnless { it == AllowanceCalculationType.PER_HOUR }
+            ?: AllowanceCalculationType.FIXED_PER_SHIFT)
+    }
     var category by remember(initial) { mutableStateOf(initial?.category ?: AllowanceCategory.ALTRE_VOCI) }
     var applicationMode by remember(initial) { mutableStateOf(initial?.applicationMode ?: AllowanceApplicationMode.MANUAL) }
     var performanceMask by remember(initial) {
@@ -1183,7 +1186,7 @@ internal fun RuleEditorDialog(
                 item { Text("Tipo di calcolo", fontWeight = FontWeight.SemiBold) }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AllowanceCalculationType.entries.forEach { calculation ->
+                        AllowanceCalculationType.entries.filterNot { it == AllowanceCalculationType.PER_HOUR }.forEach { calculation ->
                             FilterChip(selected = type == calculation, onClick = { type = calculation }, label = { Text(typeLabel(calculation)) })
                         }
                     }
