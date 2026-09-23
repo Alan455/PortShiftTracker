@@ -19,6 +19,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,8 +77,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -817,7 +820,8 @@ internal fun AllowanceCategoryCard(
     selectedIds: Set<Long>,
     performanceType: PerformanceType,
     usageCounts: Map<Long, Int>,
-    onToggle: (AllowanceRuleEntity, Boolean) -> Unit
+    onToggle: (AllowanceRuleEntity, Boolean) -> Unit,
+    compactWrap: Boolean = false
 ) {
     val orderedRules = rules.sortedWith(
         compareByDescending<AllowanceRuleEntity> { usageCounts[it.id] ?: 0 }
@@ -865,11 +869,13 @@ internal fun AllowanceCategoryCard(
             }
 
             when (category) {
-                AllowanceCategory.AREA -> Text(
-                    "Se prevista, registra l'area insieme all'avviamento.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                AllowanceCategory.AREA -> if (!compactWrap) {
+                    Text(
+                        "Se prevista, registra l'area insieme all'avviamento.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 AllowanceCategory.DOPPIO -> Text(
                     if (performanceType == PerformanceType.MEZZO_DOPPIO)
                         "Nel Mezzo Doppio si dimezza solo l'indennità di turno; Area e Disagi restano interi."
@@ -881,7 +887,45 @@ internal fun AllowanceCategoryCard(
                 else -> Unit
             }
 
-            if (horizontal) {
+            if (compactWrap && category in setOf(
+                    AllowanceCategory.AREA,
+                    AllowanceCategory.AVVIAMENTO,
+                    AllowanceCategory.DISAGIO,
+                    AllowanceCategory.ALTRE_VOCI
+                )
+            ) {
+                val density = LocalDensity.current
+                val textMeasurer = rememberTextMeasurer()
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    orderedRules.forEach { rule ->
+                        // Let the label/amount determine the width, while retaining
+                        // a readable minimum and wrapping long labels on narrow screens.
+                        val nameWidth = textMeasurer.measure(
+                            text = rule.name,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = if (rule.id in selectedIds) FontWeight.Bold else FontWeight.SemiBold
+                            )
+                        ).size.width
+                        val amountWidth = textMeasurer.measure(
+                            text = ruleValueLabel(rule, performanceType),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        ).size.width
+                        val contentWidth = with(density) { maxOf(nameWidth, amountWidth).toDp() }
+                        val tileWidth = (contentWidth + 34.dp).coerceIn(105.dp, 190.dp)
+                        AllowanceRuleTile(
+                            rule = rule,
+                            checked = rule.id in selectedIds,
+                            performanceType = performanceType,
+                            modifier = Modifier.width(tileWidth),
+                            onToggle = onToggle
+                        )
+                    }
+                }
+            } else if (horizontal) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(orderedRules, key = { it.id }) { rule ->
                         AllowanceRuleTile(
