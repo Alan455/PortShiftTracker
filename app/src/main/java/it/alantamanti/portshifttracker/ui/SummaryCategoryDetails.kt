@@ -43,16 +43,15 @@ internal fun summaryCategoryDetails(
     // category. Congedo/Donazione/INAIL may also have an additive allowance
     // line carrying the absence itself; move that line from "Altre voci"
     // into the same absence category so the monthly total is not duplicated.
-    val absenceCodeByRow = rows.associateWith { row ->
+    fun absenceCode(row: ShiftWithPay): String? =
         summaryAbsenceNames.keys.firstOrNull { code ->
             row.selectedRules.any { it.code == code }
         }
-    }
     val absenceRuleIds = rules.filter { it.code in summaryAbsenceNames.keys }
         .associate { it.id to it.code }
     val absorbedAbsenceRuleIds = rows.asSequence()
         .flatMap { row ->
-            val absenceCode = absenceCodeByRow[row]
+            val absenceCode = absenceCode(row)
             row.pay.allowanceLines.asSequence()
                 .filter { line -> absenceRuleIds[line.ruleId] == absenceCode }
                 .map { it.ruleId }
@@ -60,7 +59,7 @@ internal fun summaryCategoryDetails(
         .toSet()
 
     val baseComponents = sortedComponents(
-        rows.filter { absenceCodeByRow[it] == null }
+        rows.filter { absenceCode(it) == null }
             .groupBy { row ->
                 if (row.selectedRules.any { it.code == "G" || it.code == "DOP_G" }) {
                     "Giornalieri"
@@ -75,7 +74,7 @@ internal fun summaryCategoryDetails(
     )
 
     val absenceDetails = summaryAbsenceNames.mapNotNull { (code, label) ->
-        val matching = rows.filter { absenceCodeByRow[it] == code }
+        val matching = rows.filter { absenceCode(it) == code }
         if (matching.isEmpty()) return@mapNotNull null
         val baseAmount = matching.sumOf { it.pay.basePayCents }
         val absenceAllowance = matching.sumOf { row ->
@@ -100,9 +99,11 @@ internal fun summaryCategoryDetails(
     fun componentsFor(category: AllowanceCategory): List<SummaryCategoryComponent> =
         rows.asSequence()
             .flatMap { it.pay.allowanceLines.asSequence() }
-            .filter { rulesById[it.ruleId]?.category == category ||
-                (category == AllowanceCategory.TURNO &&
-                    rulesById[it.ruleId]?.category == AllowanceCategory.MEZZO_TURNO)
+            .filter { line ->
+                line.ruleId !in absorbedAbsenceRuleIds &&
+                    (rulesById[line.ruleId]?.category == category ||
+                        (category == AllowanceCategory.TURNO &&
+                            rulesById[line.ruleId]?.category == AllowanceCategory.MEZZO_TURNO))
             }
             .groupBy { line -> line.ruleId to (rulesById[line.ruleId]?.name ?: line.name) }
             .map { (identity, lines) ->
@@ -124,11 +125,11 @@ internal fun summaryCategoryDetails(
 
     val primary = listOf(
         SummaryCategoryDetail("base", "Base", baseComponents.sumOf { it.cents }, baseComponents),
-        SummaryCategoryDetail("turno", "Turno", totals.turno, turno),
-        SummaryCategoryDetail("avviamento", "Avviamento", totals.avviamento, avviamento),
-        SummaryCategoryDetail("disagio", "Disagi", totals.disagio, disagio),
-        SummaryCategoryDetail("area", "Area", totals.area, area),
-        SummaryCategoryDetail("doppio", "Doppio", totals.doppio, doppio)
+        SummaryCategoryDetail("turno", "Turno", turno.sumOf { it.cents }, turno),
+        SummaryCategoryDetail("avviamento", "Avviamento", avviamento.sumOf { it.cents }, avviamento),
+        SummaryCategoryDetail("disagio", "Disagi", disagio.sumOf { it.cents }, disagio),
+        SummaryCategoryDetail("area", "Area", area.sumOf { it.cents }, area),
+        SummaryCategoryDetail("doppio", "Doppio", doppio.sumOf { it.cents }, doppio)
     )
 
     // Each "Altre voci" rule is now a full-size row in the ONE category card,
