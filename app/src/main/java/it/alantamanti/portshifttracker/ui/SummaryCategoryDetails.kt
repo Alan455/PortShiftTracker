@@ -52,7 +52,9 @@ internal fun summaryCategoryDetails(
         .flatMap { row ->
             val absenceCode = absenceCode(row)
             row.pay.allowanceLines.asSequence()
-                .filter { line -> absenceRuleIds[line.ruleId] == absenceCode }
+                .filter { line ->
+                    absenceCode != null && absenceRuleIds[line.ruleId] == absenceCode
+                }
                 .map { it.ruleId }
         }
         .toSet()
