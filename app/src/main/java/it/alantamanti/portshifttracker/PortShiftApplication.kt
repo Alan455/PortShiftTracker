@@ -69,6 +69,15 @@ class PortShiftApplication : Application() {
                 "AND calculationType != 'FIXED_PER_SHIFT'"
         )
 
+        // Tutte le vecchie voci orarie, incluse le personalizzate, diventano
+        // importi fissi per selezione. Il valore numerico della tariffa resta
+        // invariato; il predicato converte ciascuna regola soltanto una volta.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET calculationType = 'FIXED_PER_SHIFT', " +
+                "windowStartMinute = NULL, windowEndMinute = NULL, minimumShiftMinutes = 0 " +
+                "WHERE calculationType = 'PER_HOUR'"
+        )
+
         // Riallinea il catalogo voci sui database già esistenti.
         // Donazione sangue, Inail e Congedo non sono Avviamenti.
         db.openHelper.writableDatabase.execSQL(
