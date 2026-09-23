@@ -1153,7 +1153,7 @@ private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
         GuidedEntryKind.ABS_CONGEDO -> Triple("PC", "Congedo", "Assenza")
         GuidedEntryKind.ABS_IMA -> Triple("I", "IMA", "Puoi scegliere Disdetta casa o festiva")
         GuidedEntryKind.SECOND_DOPPIO -> Triple("2×", "Doppio completo", "Base e indennità turno intere")
-        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · Pom/Sera/S2/Notte al 50%")
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · tutte le indennità turno al 50%")
         GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "ONMezzo · secondo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
     }
     Surface(
