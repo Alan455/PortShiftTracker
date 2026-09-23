@@ -49,19 +49,24 @@ class PortShiftApplication : Application() {
         // Aggiunge soltanto le voci mancanti. Le modifiche dell'utente restano intatte.
         DefaultCatalog.rules().forEach { db.allowanceRuleDao().insertIfMissing(it) }
 
-        // Regole economiche concordate: gli importi delle tre assenze
-        // sostituiscono la base. Riallinea anche le installazioni esistenti,
-        // poiché insertIfMissing() da solo non aggiorna le vecchie voci.
+        // Corregge SOLO le regole legacy, senza reimpostare le tariffe a ogni
+        // successivo avvio: un'eventuale personalizzazione futura resta salva.
+        // Le tre assenze concordate sostituiscono l'intera prestazione.
         db.openHelper.writableDatabase.execSQL(
             "UPDATE allowance_rules SET basePayEffect = 'REPLACE_BASE', " +
+                "exclusiveGroup = 'SOSTITUISCE_BASE', calculationType = 'FIXED_PER_SHIFT', " +
                 "value = CASE code WHEN 'AVV_CONGEDO' THEN 3000 " +
                 "WHEN 'AVV_DS' THEN 9500 WHEN 'AVV_INAIL' THEN 6780 END, " +
-                "performanceMask = 1 WHERE code IN ('AVV_CONGEDO','AVV_DS','AVV_INAIL')"
+                "performanceMask = 1 WHERE code IN ('AVV_CONGEDO','AVV_DS','AVV_INAIL') " +
+                "AND basePayEffect != 'REPLACE_BASE'"
         )
-        // FuoriOrario è un importo fisso per selezione, non una tariffa oraria.
+        // Il vecchio FuoriOrario/h orario diventa €7,75 una sola volta per
+        // selezione; la regola già convertita non viene più sovrascritta.
         db.openHelper.writableDatabase.execSQL(
             "UPDATE allowance_rules SET calculationType = 'FIXED_PER_SHIFT', " +
-                "value = 775, name = 'FuoriOrario' WHERE code = 'AVV_FUORI_ORARIO_H'"
+                "value = 775, name = 'FuoriOrario', windowStartMinute = NULL, " +
+                "windowEndMinute = NULL WHERE code = 'AVV_FUORI_ORARIO_H' " +
+                "AND calculationType != 'FIXED_PER_SHIFT'"
         )
 
         // Riallinea il catalogo voci sui database già esistenti.
