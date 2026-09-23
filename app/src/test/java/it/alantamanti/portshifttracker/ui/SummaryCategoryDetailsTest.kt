@@ -109,17 +109,52 @@ class SummaryCategoryDetailsTest {
     }
 
     @Test
-    fun paidAbsencesAreNotMisrepresentedAsWorkedTurns() {
+    fun absencesAreSeparateCategoriesAndNeverIncludedInBase() {
         val ferie = rule(20, "ALT_FERIE", "Ferie", AllowanceCategory.ALTRE_VOCI)
-        val categories = summaryCategoryDetails(
-            listOf(row(base = 6_000), row(base = 4_000, selected = listOf(ferie))),
-            listOf(ferie)
+        val malattia = rule(21, "ALT_MALATTIA", "Malattia", AllowanceCategory.ALTRE_VOCI)
+        val congedo = rule(22, "AVV_CONGEDO", "Congedo", AllowanceCategory.ALTRE_VOCI)
+        val ima = rule(23, "ALT_IMA", "IMA", AllowanceCategory.ALTRE_VOCI)
+        val rows = listOf(
+            row(base = 6_000),
+            row(base = 4_000, selected = listOf(ferie)),
+            row(base = 3_000, selected = listOf(malattia)),
+            row(base = 2_000, lines = listOf(AllowanceLine(22, "Congedo", 60, 900)),
+                selected = listOf(congedo)),
+            row(base = 1_000, selected = listOf(ima))
         )
+        val categories = summaryCategoryDetails(rows, listOf(ferie, malattia, congedo, ima))
         val base = categories.single { it.id == "base" }
-        assertEquals(10_000L, base.cents)
+        assertEquals(6_000L, base.cents)
+        assertEquals(listOf(SummaryCategoryComponent("Turni", 6_000)), base.components)
+        assertEquals(4_000L, categories.single { it.label == "Ferie" }.cents)
+        assertEquals(3_000L, categories.single { it.label == "Malattia" }.cents)
+        assertEquals(2_900L, categories.single { it.label == "Congedo" }.cents)
         assertEquals(
-            listOf(SummaryCategoryComponent("Turni", 6_000), SummaryCategoryComponent("Assenze", 4_000)),
-            base.components
+            listOf(SummaryCategoryComponent("Base", 2_000), SummaryCategoryComponent("Indennità Congedo", 900)),
+            categories.single { it.label == "Congedo" }.components
         )
+        assertEquals(1_000L, categories.single { it.label == "IMA" }.cents)
+        assertFalse(categories.any { it.id.startsWith("other:") && it.label == "Congedo" })
+        assertEquals(rows.sumOf { it.pay.totalPayCents }, categories.sumOf { it.cents })
+    }
+
+    @Test
+    fun categoriesAndPopupComponentsAreSortedByDescendingAmount() {
+        val q2 = rule(30, "Q2", "Q2", AllowanceCategory.AREA)
+        val h = rule(31, "H", "H", AllowanceCategory.AREA)
+        val pioggia = rule(32, "PIOGGIA", "Pioggia", AllowanceCategory.DISAGIO)
+        val categories = summaryCategoryDetails(
+            listOf(row(base = 3_000, lines = listOf(
+                AllowanceLine(30, "Q2", 60, 1_000),
+                AllowanceLine(31, "H", 60, 6_000),
+                AllowanceLine(32, "Pioggia", 60, 2_000)
+            ))),
+            listOf(q2, h, pioggia)
+        )
+        assertEquals(
+            categories.map { it.cents }.sortedDescending(),
+            categories.map { it.cents }
+        )
+        assertEquals(listOf("H", "Q2"), categories.single { it.id == "area" }.components.map { it.label })
     }
 }
