@@ -819,11 +819,14 @@ private fun SummaryCategorySheet(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            component.label,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(component.label, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "${component.applications} ${if (component.applications == 1) "applicazione" else "applicazioni"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
                             money(component.cents),
                             style = MaterialTheme.typography.bodyLarge,
