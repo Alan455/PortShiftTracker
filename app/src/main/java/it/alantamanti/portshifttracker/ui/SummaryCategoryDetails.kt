@@ -20,9 +20,17 @@ internal data class SummaryCategoryDetail(
     val components: List<SummaryCategoryComponent>
 )
 
-private val summaryAbsenceCodes = setOf(
-    "ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_DS", "AVV_INAIL", "AVV_CONGEDO"
+private val summaryAbsenceNames = linkedMapOf(
+    "ALT_MALATTIA" to "Malattia",
+    "ALT_FERIE" to "Ferie",
+    "AVV_CONGEDO" to "Congedo",
+    "ALT_IMA" to "IMA",
+    "AVV_DS" to "Donazione sangue",
+    "AVV_INAIL" to "INAIL"
 )
+
+private fun sortedComponents(components: List<SummaryCategoryComponent>) =
+    components.sortedWith(compareByDescending<SummaryCategoryComponent> { it.cents }.thenBy { it.label })
 
 internal fun summaryCategoryDetails(
     rows: List<ShiftWithPay>,
@@ -31,22 +39,63 @@ internal fun summaryCategoryDetails(
 ): List<SummaryCategoryDetail> {
     val rulesById = rules.associateBy { it.id }
 
-    // DOP_G and first-turn G/ONMezzo both contribute to Giornalieri.
-    // Preserve any paid absence base as its own component so the sheet's
-    // components always reconcile with the actual monthly Base amount.
-    val baseByKind = rows.groupBy { row ->
-        when {
-            row.selectedRules.any { it.code in summaryAbsenceCodes } -> "Assenze"
-            row.selectedRules.any { it.code == "G" || it.code == "DOP_G" } -> "Giornalieri"
-            else -> "Turni"
+    // A paid absence must not be counted under "Base": show it as its own
+    // category. Congedo/Donazione/INAIL may also have an additive allowance
+    // line carrying the absence itself; move that line from "Altre voci"
+    // into the same absence category so the monthly total is not duplicated.
+    val absenceCodeByRow = rows.associateWith { row ->
+        summaryAbsenceNames.keys.firstOrNull { code ->
+            row.selectedRules.any { it.code == code }
         }
     }
-    val baseComponents = listOf("Turni", "Giornalieri", "Assenze")
-        .mapNotNull { kind ->
-            baseByKind[kind]?.sumOf { it.pay.basePayCents }
-                ?.let { amount -> SummaryCategoryComponent(kind, amount) }
+    val absenceRuleIds = rules.filter { it.code in summaryAbsenceNames.keys }
+        .associate { it.id to it.code }
+    val absorbedAbsenceRuleIds = rows.asSequence()
+        .flatMap { row ->
+            val absenceCode = absenceCodeByRow[row]
+            row.pay.allowanceLines.asSequence()
+                .filter { line -> absenceRuleIds[line.ruleId] == absenceCode }
+                .map { it.ruleId }
         }
-        .filter { it.cents != 0L }
+        .toSet()
+
+    val baseComponents = sortedComponents(
+        rows.filter { absenceCodeByRow[it] == null }
+            .groupBy { row ->
+                if (row.selectedRules.any { it.code == "G" || it.code == "DOP_G" }) {
+                    "Giornalieri"
+                } else {
+                    "Turni"
+                }
+            }
+            .map { (label, entries) ->
+                SummaryCategoryComponent(label, entries.sumOf { it.pay.basePayCents })
+            }
+            .filter { it.cents != 0L }
+    )
+
+    val absenceDetails = summaryAbsenceNames.mapNotNull { (code, label) ->
+        val matching = rows.filter { absenceCodeByRow[it] == code }
+        if (matching.isEmpty()) return@mapNotNull null
+        val baseAmount = matching.sumOf { it.pay.basePayCents }
+        val absenceAllowance = matching.sumOf { row ->
+            row.pay.allowanceLines
+                .filter { line -> absenceRuleIds[line.ruleId] == code }
+                .sumOf { it.amountCents }
+        }
+        val amount = baseAmount + absenceAllowance
+        SummaryCategoryDetail(
+            id = "absence:$code",
+            label = label,
+            cents = amount,
+            components = sortedComponents(
+                listOf(
+                    SummaryCategoryComponent("Base", baseAmount),
+                    SummaryCategoryComponent("Indennità $label", absenceAllowance)
+                ).filter { it.cents != 0L }
+            )
+        )
+    }
 
     fun componentsFor(category: AllowanceCategory): List<SummaryCategoryComponent> =
         rows.asSequence()
@@ -64,7 +113,7 @@ internal fun summaryCategoryDetails(
                 )
             }
             .filter { it.second != 0L }
-            .sortedWith(compareBy<Triple<String, Long, Int>> { it.third }.thenBy { it.first })
+            .sortedWith(compareByDescending<Triple<String, Long, Int>> { it.second }.thenBy { it.first })
             .map { SummaryCategoryComponent(it.first, it.second) }
 
     val turno = componentsFor(AllowanceCategory.TURNO)
@@ -74,7 +123,7 @@ internal fun summaryCategoryDetails(
     val doppio = componentsFor(AllowanceCategory.DOPPIO)
 
     val primary = listOf(
-        SummaryCategoryDetail("base", "Base", totals.base, baseComponents),
+        SummaryCategoryDetail("base", "Base", baseComponents.sumOf { it.cents }, baseComponents),
         SummaryCategoryDetail("turno", "Turno", totals.turno, turno),
         SummaryCategoryDetail("avviamento", "Avviamento", totals.avviamento, avviamento),
         SummaryCategoryDetail("disagio", "Disagi", totals.disagio, disagio),
@@ -87,7 +136,8 @@ internal fun summaryCategoryDetails(
     val others = rows.asSequence()
         .flatMap { it.pay.allowanceLines.asSequence() }
         .filter { line ->
-            when (rulesById[line.ruleId]?.category) {
+            line.ruleId !in absorbedAbsenceRuleIds &&
+                when (rulesById[line.ruleId]?.category) {
                 AllowanceCategory.ALTRE_VOCI, AllowanceCategory.ALTRO, null -> true
                 else -> false
             }
@@ -101,7 +151,7 @@ internal fun summaryCategoryDetails(
             )
         }
         .filter { it.second != 0L }
-        .sortedWith(compareBy<Triple<Pair<Long, String>, Long, Int>> { it.third }
+        .sortedWith(compareByDescending<Triple<Pair<Long, String>, Long, Int>> { it.second }
             .thenBy { it.first.second })
         .map { (identity, amount, _) ->
             SummaryCategoryDetail(
@@ -112,5 +162,6 @@ internal fun summaryCategoryDetails(
             )
         }
 
-    return primary + others
+    return (primary + absenceDetails + others)
+        .sortedWith(compareByDescending<SummaryCategoryDetail> { it.cents }.thenBy { it.label })
 }
