@@ -200,7 +200,12 @@ internal fun ShiftEditorScreen(
         if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
     }
     val selectedRules = manualRules.filter { it.id in normalizedSelectedIds }
-    val saveValidationMessage = selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
+    val isFestivo = (specialOverrideClass ?: portDayClass(editorDate)) == PortDayClass.FESTIVO
+    val festiveDisdettaSelected = selectedRules.any { it.code == "AVV_DIS_CASA_FEST" }
+    val saveValidationMessage =
+        if (festiveDisdettaSelected && !isFestivo) {
+            "Disdetta casa festiva è disponibile soltanto nei giorni festivi."
+        } else selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
     val usageScores = remember(historyRows, role, performanceType, editorDate) {
         ruleUsageScores(historyRows, editorDate, performanceType, role)
     }
@@ -919,6 +924,7 @@ internal fun ShiftEditorScreen(
                         val categoryRules = manualRules
                             .filter { it.category == category }
                             .filter { rule -> guidedEntry == null || guidedRuleVisible(guidedEntry, rule) }
+                            .filter { rule -> rule.code != "AVV_DIS_CASA_FEST" || isFestivo }
                             .filterNot { rule ->
                                 isGiornaliero &&
                                     category == AllowanceCategory.MEZZO_TURNO &&
@@ -1148,7 +1154,7 @@ private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
         GuidedEntryKind.ABS_IMA -> Triple("I", "IMA", "Puoi scegliere Disdetta casa o festiva")
         GuidedEntryKind.SECOND_DOPPIO -> Triple("2×", "Doppio completo", "Base e indennità turno intere")
         GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · Pom/Sera/S2/Notte al 50%")
-        GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "Mezzo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
+        GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "ONMezzo · secondo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
