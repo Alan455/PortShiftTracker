@@ -19,7 +19,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -821,7 +820,7 @@ internal fun AllowanceCategoryCard(
     performanceType: PerformanceType,
     usageCounts: Map<Long, Int>,
     onToggle: (AllowanceRuleEntity, Boolean) -> Unit,
-    compactWrap: Boolean = false
+    compactHorizontal: Boolean = false
 ) {
     val orderedRules = rules.sortedWith(
         compareByDescending<AllowanceRuleEntity> { usageCounts[it.id] ?: 0 }
@@ -869,7 +868,7 @@ internal fun AllowanceCategoryCard(
             }
 
             when (category) {
-                AllowanceCategory.AREA -> if (!compactWrap) {
+                AllowanceCategory.AREA -> if (!compactHorizontal) {
                     Text(
                         "Se prevista, registra l'area insieme all'avviamento.",
                         style = MaterialTheme.typography.bodySmall,
@@ -887,7 +886,7 @@ internal fun AllowanceCategoryCard(
                 else -> Unit
             }
 
-            if (compactWrap && category in setOf(
+            if (compactHorizontal && category in setOf(
                     AllowanceCategory.AREA,
                     AllowanceCategory.AVVIAMENTO,
                     AllowanceCategory.DISAGIO,
@@ -896,14 +895,12 @@ internal fun AllowanceCategoryCard(
             ) {
                 val density = LocalDensity.current
                 val textMeasurer = rememberTextMeasurer()
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    orderedRules.forEach { rule ->
-                        // Let the label/amount determine the width, while retaining
-                        // a readable minimum and wrapping long labels on narrow screens.
+                    items(orderedRules, key = { it.id }) { rule ->
+                        // Keep each tile on the horizontal list, sizing it to its
+                        // label and amount rather than wrapping onto a new row.
                         val nameWidth = textMeasurer.measure(
                             text = rule.name,
                             style = MaterialTheme.typography.labelLarge.copy(
