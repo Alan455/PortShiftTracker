@@ -66,8 +66,8 @@ class SummaryCategoryDetailsTest {
         val base = categories.single { it.id == "base" }
         assertEquals(18_750L, base.cents)
         assertEquals(
-            listOf(SummaryCategoryComponent("Turni", 12_000),
-                SummaryCategoryComponent("Giornalieri", 6_750)),
+            listOf(SummaryCategoryComponent("Turni", 12_000, 1),
+                SummaryCategoryComponent("Giornalieri", 6_750, 2)),
             base.components
         )
         assertEquals(base.cents, base.components.sumOf { it.cents })
@@ -96,13 +96,14 @@ class SummaryCategoryDetailsTest {
         val categories = summaryCategoryDetails(listOf(row(14_680, amounts)), rules)
         assertEquals(11_500L, categories.single { it.id == "turno" }.cents)
         assertEquals(11_500L, categories.single { it.id == "turno" }.components.sumOf { it.cents })
-        assertEquals(listOf(SummaryCategoryComponent("Disdetta casa", 4_000)),
+        assertEquals(listOf(SummaryCategoryComponent("Disdetta casa", 4_000, 1)),
             categories.single { it.id == "avviamento" }.components)
         assertEquals(
             mapOf("Q2" to 5_000L, "H" to 400L),
             categories.single { it.id == "area" }.components.associate { it.label to it.cents }
         )
         assertEquals(5_400L, categories.single { it.id == "area" }.cents)
+        assertEquals(1, categories.single { it.id == "area" }.components.single { it.label == "Q2" }.applications)
         assertEquals(852L, categories.single { it.label == "Polivalenza" }.cents)
         assertFalse(categories.any { it.label == "Altre voci" })
         assertTrue(categories.single { it.id == "disagio" }.components.isEmpty())
@@ -125,12 +126,12 @@ class SummaryCategoryDetailsTest {
         val categories = summaryCategoryDetails(rows, listOf(ferie, malattia, congedo, ima))
         val base = categories.single { it.id == "base" }
         assertEquals(6_000L, base.cents)
-        assertEquals(listOf(SummaryCategoryComponent("Turni", 6_000)), base.components)
+        assertEquals(listOf(SummaryCategoryComponent("Turni", 6_000, 1)), base.components)
         assertEquals(4_000L, categories.single { it.label == "Ferie" }.cents)
         assertEquals(3_000L, categories.single { it.label == "Malattia" }.cents)
         assertEquals(2_900L, categories.single { it.label == "Congedo" }.cents)
         assertEquals(
-            listOf(SummaryCategoryComponent("Base", 2_000), SummaryCategoryComponent("Indennità Congedo", 900)),
+            listOf(SummaryCategoryComponent("Base", 2_000, 1), SummaryCategoryComponent("Indennità Congedo", 900, 1)),
             categories.single { it.label == "Congedo" }.components
         )
         assertEquals(1_000L, categories.single { it.label == "IMA" }.cents)
