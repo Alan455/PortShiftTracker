@@ -639,6 +639,7 @@ internal fun ShiftEditorScreen(
                                 overrideClass = specialOverrideClass,
                                 onKindSelected = { kind ->
                                     quickKind = kind
+                                    if (guidedEntry != null) guidedAllowancesExpanded = true
                                     selectedIds = normalizeSelectedRuleIds(
                                         performanceType,
                                         applyQuickTurnSelection(
@@ -931,6 +932,7 @@ internal fun ShiftEditorScreen(
                                     selectedIds = selectedIds,
                                     performanceType = performanceType,
                                     usageCounts = usageScores,
+                                    compactWrap = guidedEntry != null,
                                     onToggle = { rule, checked ->
                                         selectedIds = normalizeSelectedRuleIds(
                                             performanceType,
