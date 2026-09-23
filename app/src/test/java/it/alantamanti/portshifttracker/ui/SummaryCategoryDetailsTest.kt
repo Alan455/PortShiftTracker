@@ -99,8 +99,8 @@ class SummaryCategoryDetailsTest {
         assertEquals(listOf(SummaryCategoryComponent("Disdetta casa", 4_000)),
             categories.single { it.id == "avviamento" }.components)
         assertEquals(
-            listOf(SummaryCategoryComponent("Q2", 5_000), SummaryCategoryComponent("H", 400)),
-            categories.single { it.id == "area" }.components
+            mapOf("Q2" to 5_000L, "H" to 400L),
+            categories.single { it.id == "area" }.components.associate { it.label to it.cents }
         )
         assertEquals(5_400L, categories.single { it.id == "area" }.cents)
         assertEquals(852L, categories.single { it.label == "Polivalenza" }.cents)
