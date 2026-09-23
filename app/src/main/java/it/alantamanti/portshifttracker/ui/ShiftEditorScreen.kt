@@ -932,7 +932,7 @@ internal fun ShiftEditorScreen(
                                     selectedIds = selectedIds,
                                     performanceType = performanceType,
                                     usageCounts = usageScores,
-                                    compactWrap = guidedEntry != null,
+                                    compactHorizontal = guidedEntry != null,
                                     onToggle = { rule, checked ->
                                         selectedIds = normalizeSelectedRuleIds(
                                             performanceType,
