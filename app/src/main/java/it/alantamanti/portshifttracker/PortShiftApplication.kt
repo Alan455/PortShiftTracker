@@ -49,6 +49,21 @@ class PortShiftApplication : Application() {
         // Aggiunge soltanto le voci mancanti. Le modifiche dell'utente restano intatte.
         DefaultCatalog.rules().forEach { db.allowanceRuleDao().insertIfMissing(it) }
 
+        // Regole economiche concordate: gli importi delle tre assenze
+        // sostituiscono la base. Riallinea anche le installazioni esistenti,
+        // poiché insertIfMissing() da solo non aggiorna le vecchie voci.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET basePayEffect = 'REPLACE_BASE', " +
+                "value = CASE code WHEN 'AVV_CONGEDO' THEN 3000 " +
+                "WHEN 'AVV_DS' THEN 9500 WHEN 'AVV_INAIL' THEN 6780 END, " +
+                "performanceMask = 1 WHERE code IN ('AVV_CONGEDO','AVV_DS','AVV_INAIL')"
+        )
+        // FuoriOrario è un importo fisso per selezione, non una tariffa oraria.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET calculationType = 'FIXED_PER_SHIFT', " +
+                "value = 775, name = 'FuoriOrario' WHERE code = 'AVV_FUORI_ORARIO_H'"
+        )
+
         // Riallinea il catalogo voci sui database già esistenti.
         // Donazione sangue, Inail e Congedo non sono Avviamenti.
         db.openHelper.writableDatabase.execSQL(
