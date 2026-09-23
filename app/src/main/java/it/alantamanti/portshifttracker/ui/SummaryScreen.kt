@@ -703,13 +703,13 @@ private fun SummaryBreakdownRow(
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Spacer(Modifier.size(10.dp).background(color, CircleShape))
         Text(
             text = label,
-            modifier = Modifier.width(84.dp),
-            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(98.dp),
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -720,17 +720,17 @@ private fun SummaryBreakdownRow(
         )
         Text(
             money(cents),
-            modifier = Modifier.width(76.dp),
+            modifier = Modifier.width(79.dp),
             textAlign = TextAlign.End,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )
         Text(
             summaryPercent(cents, total),
-            modifier = Modifier.width(30.dp),
+            modifier = Modifier.width(34.dp),
             textAlign = TextAlign.End,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
@@ -816,11 +816,11 @@ private fun SummaryCategorySheet(
                         Text(
                             component.label,
                             modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
                             money(component.cents),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
                     }
