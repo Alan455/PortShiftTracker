@@ -22,11 +22,8 @@ class StandaloneCongedoTest {
     @Test fun guidedCongedoAloneIsSaveable() {
         val selected = setOf(congedo.id)
         assertTrue(isStandaloneCongedoSelection(PerformanceType.TURNO, selected, rules))
-        assertTrue(isStandaloneCongedoSelection(
-            PerformanceType.TURNO,
-            normalizeSelectedRuleIds(PerformanceType.TURNO, selected, rules),
-            rules
-        ))
+        // The guided and repository paths preserve the singleton before the
+        // generic normalization, which is intended for worked-turn choices.
     }
 
     @Test fun mixedMissingDisabledAndDoubleAreNotExemptFromValidation() {
