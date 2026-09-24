@@ -73,6 +73,26 @@ class FrozenPaySnapshotTest {
         assertEquals(before, repository.shiftRows.first().single().pay)
     }
 
+    @Test fun legacyShiftIsFrozenBeforeAnOrdinaryTariffEdit() = runBlocking {
+        val rules = db.allowanceRuleDao().getAll()
+        val mattina = rules.single { it.code == "MAT" }
+        val q2 = rules.single { it.code == "AREA_Q2" }
+        val start = LocalDate.of(2026, 9, 17).atTime(6, 30)
+            .atZone(ZoneId.of("Europe/Rome")).toInstant().toEpochMilli()
+        val oldId = db.shiftDao().insert(
+            ShiftEntity(workerId = 1, startEpochMillis = start, endEpochMillis = start + 6L * 3600_000L)
+        )
+        db.shiftAllowanceSelectionDao().insertAll(listOf(
+            it.alantamanti.portshifttracker.data.local.ShiftAllowanceSelectionEntity(oldId, mattina.id),
+            it.alantamanti.portshifttracker.data.local.ShiftAllowanceSelectionEntity(oldId, q2.id)
+        ))
+        assertTrue(db.shiftPaySnapshotDao().getAll().isEmpty())
+        val original = repository.shiftRows.first().single().pay
+        repository.saveRule(q2.copy(value = 1200))
+        assertEquals(1, db.shiftPaySnapshotDao().getAll().size)
+        assertEquals(original, repository.shiftRows.first().single().pay)
+    }
+
     @Test fun targetedRetroactiveCorrectionUpdatesOnlyRequestedAllowance() = runBlocking {
         val rules = db.allowanceRuleDao().getAll()
         val mattina = rules.single { it.code == "MAT" }
