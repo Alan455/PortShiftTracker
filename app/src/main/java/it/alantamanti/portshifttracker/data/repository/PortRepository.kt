@@ -250,7 +250,13 @@ class PortRepository(
             if (giornaliero != null) rule.copy(value = (giornaliero.value / 2.0).roundToLong())
             else rule
         } else rule
-        ruleDao.upsert(storedRule)
+        ruleDao.upsert(
+            if (storedRule.code in setOf("G", "DOP_G", "DOP_ON_MEZZO", "DOP_TU_MEZZO")) {
+                storedRule.copy(
+                    calculationType = it.alantamanti.portshifttracker.domain.AllowanceCalculationType.FIXED_PER_SHIFT
+                )
+            } else storedRule
+        )
         // DOP_G and ONMezzo are derived from the current Giornaliero base.
         if (rule.code == "G") {
             val half = ((rule.value / 2.0).roundToLong())
