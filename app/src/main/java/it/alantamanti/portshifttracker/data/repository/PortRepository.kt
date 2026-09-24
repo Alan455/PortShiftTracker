@@ -28,6 +28,8 @@ class PortRepository(
     private val ruleDao = db.allowanceRuleDao()
     private val selectionDao = db.shiftAllowanceSelectionDao()
     private val paySnapshotDao = db.shiftPaySnapshotDao()
+    // A short undo must restore the original frozen amounts, not recalculate.
+    private val pendingUndoSnapshots = mutableMapOf<Long, ShiftPaySnapshotEntity>()
 
     val workers: Flow<List<WorkerEntity>> = workerDao.observeAll()
     val shifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
@@ -203,7 +205,10 @@ class PortRepository(
     private fun canonicalShift(shift: ShiftEntity): ShiftEntity =
         shift.copy(serviceEpochDay = localDateOf(shift).toEpochDay())
 
-    suspend fun deleteShift(shift: ShiftEntity) = shiftDao.delete(shift)
+    suspend fun deleteShift(shift: ShiftEntity) = db.withTransaction {
+        paySnapshotDao.findByShiftId(shift.id)?.let { pendingUndoSnapshots[shift.id] = it }
+        shiftDao.delete(shift)
+    }
 
     suspend fun restoreDeletedShift(shift: ShiftEntity, selectedRuleIds: Set<Long>) = db.withTransaction {
         val canonical = canonicalShift(shift)
@@ -211,12 +216,17 @@ class PortRepository(
         if (selectedRuleIds.isNotEmpty()) {
             selectionDao.insertAll(selectedRuleIds.map { ShiftAllowanceSelectionEntity(canonical.id, it) })
         }
-        val rules = ruleDao.getAll()
-        val worker = requireNotNull(workerDao.getAll().firstOrNull { it.id == canonical.workerId })
-        val pay = calculator.calculate(
-            worker.toDomain(), canonical.toDomain(), rules.map { it.toDomain() }, selectedRuleIds
-        )
-        paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(canonical.id, pay))
+        val previousSnapshot = pendingUndoSnapshots.remove(canonical.id)
+        if (previousSnapshot != null) {
+            paySnapshotDao.upsert(previousSnapshot)
+        } else {
+            val rules = ruleDao.getAll()
+            val worker = requireNotNull(workerDao.getAll().firstOrNull { it.id == canonical.workerId })
+            val pay = calculator.calculate(
+                worker.toDomain(), canonical.toDomain(), rules.map { it.toDomain() }, selectedRuleIds
+            )
+            paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(canonical.id, pay))
+        }
     }
 
     suspend fun saveRule(rule: AllowanceRuleEntity) = db.withTransaction {
@@ -251,6 +261,7 @@ class PortRepository(
         shiftDao.deleteAll()
         ruleDao.deleteAll()
         workerDao.deleteAll()
+        pendingUndoSnapshots.clear()
 
         workerDao.insertAll(snapshot.workers)
         ruleDao.insertAll(snapshot.rules)
