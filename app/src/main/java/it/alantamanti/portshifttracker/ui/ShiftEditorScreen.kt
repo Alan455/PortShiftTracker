@@ -196,7 +196,12 @@ internal fun ShiftEditorScreen(
             it.applicationMode == AllowanceApplicationMode.MANUAL &&
             (it.performanceMask and performanceType.maskBit) != 0
     }
-    val normalizedSelectedIds = normalizeSelectedRuleIds(performanceType, selectedIds, rules)
+    // Preserve the first-turn Congedo selection before normalizing worked-turn rules.
+    val normalizedSelectedIds =
+        if (guidedEntry == GuidedEntryKind.ABS_CONGEDO &&
+            isStandaloneCongedoSelection(performanceType, selectedIds, rules)
+        ) selectedIds
+        else normalizeSelectedRuleIds(performanceType, selectedIds, rules)
     LaunchedEffect(normalizedSelectedIds) {
         if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
     }
