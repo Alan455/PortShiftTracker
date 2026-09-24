@@ -1127,9 +1127,14 @@ internal fun RuleEditorDialog(
 ) {
     var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
     var code by remember(initial) { mutableStateOf(initial?.code ?: "CUSTOM_${System.currentTimeMillis()}") }
+    val structuralFixedCodes = setOf("G", "DOP_G", "DOP_ON_MEZZO", "DOP_TU_MEZZO")
+    val structuralFixed = initial?.code in structuralFixedCodes
     var type by remember(initial) {
-        mutableStateOf(initial?.calculationType?.takeUnless { it == AllowanceCalculationType.PER_HOUR }
-            ?: AllowanceCalculationType.FIXED_PER_SHIFT)
+        mutableStateOf(
+            if (structuralFixed || initial?.calculationType == AllowanceCalculationType.PER_HOUR) {
+                AllowanceCalculationType.FIXED_PER_SHIFT
+            } else initial?.calculationType ?: AllowanceCalculationType.FIXED_PER_SHIFT
+        )
     }
     var category by remember(initial) { mutableStateOf(initial?.category ?: AllowanceCategory.ALTRE_VOCI) }
     var applicationMode by remember(initial) { mutableStateOf(initial?.applicationMode ?: AllowanceApplicationMode.MANUAL) }
@@ -1187,7 +1192,12 @@ internal fun RuleEditorDialog(
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         AllowanceCalculationType.entries.filterNot { it == AllowanceCalculationType.PER_HOUR }.forEach { calculation ->
-                            FilterChip(selected = type == calculation, onClick = { type = calculation }, label = { Text(typeLabel(calculation)) })
+                            FilterChip(
+                                selected = type == calculation,
+                                enabled = !structuralFixed,
+                                onClick = { type = calculation },
+                                label = { Text(typeLabel(calculation)) }
+                            )
                         }
                     }
                 }
