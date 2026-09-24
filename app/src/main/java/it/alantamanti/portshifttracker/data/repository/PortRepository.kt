@@ -171,16 +171,30 @@ class PortRepository(
             }
         }
 
+        val previous = shiftDao.getAll().firstOrNull { it.id == canonical.id }
+        val previousSelected = selectionDao.getAll()
+            .filter { it.shiftId == canonical.id }.mapTo(mutableSetOf()) { it.ruleId }
+        val amountsAffected = previous == null ||
+            previous.workerId != canonical.workerId ||
+            previous.startEpochMillis != canonical.startEpochMillis ||
+            previous.endEpochMillis != canonical.endEpochMillis ||
+            previous.zoneId != canonical.zoneId ||
+            previous.role != canonical.role ||
+            previous.performanceType != canonical.performanceType ||
+            previousSelected != normalized
         shiftDao.update(canonical)
         selectionDao.deleteForShift(canonical.id)
         if (normalized.isNotEmpty()) {
             selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(canonical.id, it) })
         }
-        val worker = requireNotNull(workerDao.getAll().firstOrNull { it.id == canonical.workerId })
-        val pay = calculator.calculate(
-            worker.toDomain(), canonical.toDomain(), allRules.map { it.toDomain() }, normalized
-        )
-        paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(canonical.id, pay))
+        // Editing only notes/service-day metadata must not recalculate past pay.
+        if (amountsAffected || paySnapshotDao.findByShiftId(canonical.id) == null) {
+            val worker = requireNotNull(workerDao.getAll().firstOrNull { it.id == canonical.workerId })
+            val pay = calculator.calculate(
+                worker.toDomain(), canonical.toDomain(), allRules.map { it.toDomain() }, normalized
+            )
+            paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(canonical.id, pay))
+        }
     }
 
     private suspend fun ensureNoDuplicate(shift: ShiftEntity, excludeId: Long = 0) {
