@@ -231,7 +231,12 @@ class PortRepository(
 
     suspend fun saveRule(rule: AllowanceRuleEntity) = db.withTransaction {
         backfillMissingPaySnapshotsWithinTransaction()
-        ruleDao.upsert(rule)
+        val storedRule = if (rule.code == "DOP_G" || rule.code == "DOP_ON_MEZZO") {
+            val giornaliero = ruleDao.getAll().firstOrNull { it.code == "G" }
+            if (giornaliero != null) rule.copy(value = (giornaliero.value / 2.0).roundToLong())
+            else rule
+        } else rule
+        ruleDao.upsert(storedRule)
         // DOP_G and ONMezzo are derived from the current Giornaliero base.
         if (rule.code == "G") {
             val half = ((rule.value / 2.0).roundToLong())
