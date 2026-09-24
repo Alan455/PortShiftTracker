@@ -146,7 +146,7 @@ internal fun NewEntryDecisionFlow(
                         FlowChoice(
                             icon = "G",
                             title = "Giornaliero",
-                            subtitle = "Base € 90,00 · Polivalenza automatica",
+                            subtitle = "Base configurabile · Polivalenza automatica",
                             tint = Color(0xFFE1F6ED),
                             onClick = { onChosen(GuidedEntryKind.FIRST_GIORNALIERO) }
                         )
