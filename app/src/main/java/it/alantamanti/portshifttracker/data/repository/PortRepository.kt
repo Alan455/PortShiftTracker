@@ -100,8 +100,10 @@ class PortRepository(
             ensureNoDuplicate(shift)
 
             val normalized = normalizeSelectedRuleIds(shift.performanceType, selectedRuleIds, allRules)
-            selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
-                throw IllegalArgumentException(it)
+            if (!isStandaloneCongedoSelection(shift.performanceType, normalized, allRules)) {
+                selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
+                    throw IllegalArgumentException(it)
+                }
             }
 
             val shiftId = shiftDao.insert(shift)
@@ -121,8 +123,10 @@ class PortRepository(
         val canonical = canonicalShift(shift)
         ensureNoDuplicate(canonical, excludeId = canonical.id)
         val normalized = normalizeSelectedRuleIds(canonical.performanceType, selectedRuleIds, allRules)
-        selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
-            throw IllegalArgumentException(it)
+        if (!isStandaloneCongedoSelection(shift.performanceType, normalized, allRules)) {
+            selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
+                throw IllegalArgumentException(it)
+            }
         }
 
         shiftDao.update(canonical)
