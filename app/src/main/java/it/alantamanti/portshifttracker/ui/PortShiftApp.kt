@@ -1188,6 +1188,13 @@ internal fun RuleEditorDialog(
                         }
                     }
                 }
+                item {
+                    Text(
+                        "Una modifica della tariffa si applica soltanto alle prestazioni salvate successivamente. Gli importi storici restano invariati.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 item { Text("Tipo di calcolo", fontWeight = FontWeight.SemiBold) }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
