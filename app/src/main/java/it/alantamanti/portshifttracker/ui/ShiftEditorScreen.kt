@@ -82,6 +82,7 @@ import it.alantamanti.portshifttracker.data.repository.DuplicatePerformanceExcep
 import it.alantamanti.portshifttracker.data.repository.PortRepository
 import it.alantamanti.portshifttracker.data.repository.normalizeSelectedRuleIds
 import it.alantamanti.portshifttracker.data.repository.selectionValidationMessage
+import it.alantamanti.portshifttracker.data.repository.isStandaloneCongedoSelection
 import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
 import it.alantamanti.portshifttracker.data.repository.toDomain
 import it.alantamanti.portshifttracker.domain.AllowanceApplicationMode
@@ -201,10 +202,15 @@ internal fun ShiftEditorScreen(
     }
     val selectedRules = manualRules.filter { it.id in normalizedSelectedIds }
     val isFestivo = (specialOverrideClass ?: portDayClass(editorDate)) == PortDayClass.FESTIVO
-    val festiveDisdettaSelected = selectedRules.any { it.code == "AVV_DIS_CASA_FEST" }
+    val festiveDisdettaSelected = selectedRules.any { isFestiveDisdettaRule(it) }
     val saveValidationMessage =
         if (festiveDisdettaSelected && !isFestivo) {
             "Disdetta casa festiva è disponibile soltanto nei giorni festivi."
+        } else if (
+            guidedEntry == GuidedEntryKind.ABS_CONGEDO &&
+            isStandaloneCongedoSelection(performanceType, normalizedSelectedIds, rules)
+        ) {
+            null // Congedo is a complete absence; no worked-turn choice is required.
         } else selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
     val usageScores = remember(historyRows, role, performanceType, editorDate) {
         ruleUsageScores(historyRows, editorDate, performanceType, role)
@@ -217,7 +223,8 @@ internal fun ShiftEditorScreen(
         else -> true
     }
     val hasVisibleManualAllowances = manualRules.any { rule ->
-        guidedEntry == null || guidedRuleVisible(guidedEntry, rule)
+        (guidedEntry == null || guidedRuleVisible(guidedEntry, rule)) &&
+            (isFestivo || !isFestiveDisdettaRule(rule))
     }
     val recentRoleOptions = remember(historyRows, editorDate) { recentRoles(historyRows, editorDate) }
     val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
@@ -238,6 +245,7 @@ internal fun ShiftEditorScreen(
     }
     val suggestedCompanions = manualRules.filter { rule ->
         (guidedEntry == null || guidedRuleVisible(guidedEntry, rule)) &&
+            (isFestivo || !isFestiveDisdettaRule(rule)) &&
             rule.id !in normalizedSelectedIds &&
             parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
@@ -924,7 +932,7 @@ internal fun ShiftEditorScreen(
                         val categoryRules = manualRules
                             .filter { it.category == category }
                             .filter { rule -> guidedEntry == null || guidedRuleVisible(guidedEntry, rule) }
-                            .filter { rule -> rule.code != "AVV_DIS_CASA_FEST" || isFestivo }
+                            .filter { rule -> !isFestiveDisdettaRule(rule) || isFestivo }
                             .filterNot { rule ->
                                 isGiornaliero &&
                                     category == AllowanceCategory.MEZZO_TURNO &&
@@ -1188,6 +1196,11 @@ private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
         }
     }
 }
+
+// Include legacy/custom display-name duplicates, not only the catalog code.
+private fun isFestiveDisdettaRule(rule: AllowanceRuleEntity): Boolean =
+    rule.code.trim().equals("AVV_DIS_CASA_FEST", ignoreCase = true) ||
+        rule.name.trim().equals("Disdetta casa festiva", ignoreCase = true)
 
 private val guidedAbsenceRuleCodes = setOf(
     "ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_DS", "AVV_INAIL", "AVV_CONGEDO"
