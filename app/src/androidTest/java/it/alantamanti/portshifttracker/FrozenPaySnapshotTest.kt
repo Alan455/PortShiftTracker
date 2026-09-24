@@ -53,6 +53,13 @@ class FrozenPaySnapshotTest {
         repository.saveRule(q2.copy(value = 1200))
         val historic = repository.shiftRows.first().single().pay
         assertEquals(before, historic)
+        // Editing notes is not an economic event.
+        val savedShift = db.shiftDao().getAll().single()
+        repository.updateShiftWithSelections(
+            savedShift.copy(notes = "Solo nota"),
+            setOf(mattina.id, q2.id)
+        )
+        assertEquals(before, repository.shiftRows.first().single().pay)
 
         val backup = repository.exportSnapshot()
         assertEquals(1, backup.paySnapshots.size)
@@ -64,6 +71,26 @@ class FrozenPaySnapshotTest {
         db.shiftPaySnapshotDao().deleteAll()
         repository.restoreSnapshot(restored.database)
         assertEquals(before, repository.shiftRows.first().single().pay)
+    }
+
+    @Test fun targetedRetroactiveCorrectionUpdatesOnlyRequestedAllowance() = runBlocking {
+        val rules = db.allowanceRuleDao().getAll()
+        val mattina = rules.single { it.code == "MAT" }
+        val q2 = rules.single { it.code == "AREA_Q2" }
+        val start = LocalDate.of(2026, 9, 17).atTime(6, 30)
+            .atZone(ZoneId.of("Europe/Rome")).toInstant().toEpochMilli()
+        repository.addShiftWithSelections(
+            ShiftEntity(workerId = 1, startEpochMillis = start, endEpochMillis = start + 6L * 3600_000L),
+            setOf(mattina.id, q2.id)
+        )
+        val before = repository.shiftRows.first().single().pay
+        assertEquals(1, repository.correctHistoricAllowanceLine("AREA_Q2") { _, previous -> previous + 100 })
+        val after = repository.shiftRows.first().single().pay
+        assertEquals(before.basePayCents, after.basePayCents)
+        assertEquals(before.allowanceLines.filter { it.ruleId != q2.id },
+            after.allowanceLines.filter { it.ruleId != q2.id })
+        assertEquals(before.totalPayCents + 100L, after.totalPayCents)
+        assertEquals(0, repository.correctHistoricAllowanceLine("AREA_Q2") { _, previous -> previous })
     }
 
     @Test fun v1BackupWithoutSnapshotsCanStillBeRead() = runBlocking {
