@@ -3,6 +3,7 @@ package it.alantamanti.portshifttracker.data.repository
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.data.local.ShiftAllowanceSelectionEntity
 import it.alantamanti.portshifttracker.data.local.ShiftEntity
+import it.alantamanti.portshifttracker.data.local.ShiftPaySnapshotEntity
 import it.alantamanti.portshifttracker.data.local.WorkerEntity
 import it.alantamanti.portshifttracker.domain.AllowanceApplicationMode
 import it.alantamanti.portshifttracker.domain.AllowanceAutoTrigger
@@ -18,7 +19,8 @@ data class DatabaseSnapshot(
     val workers: List<WorkerEntity>,
     val shifts: List<ShiftEntity>,
     val rules: List<AllowanceRuleEntity>,
-    val selections: List<ShiftAllowanceSelectionEntity>
+    val selections: List<ShiftAllowanceSelectionEntity>,
+    val paySnapshots: List<ShiftPaySnapshotEntity> = emptyList()
 )
 
 data class DecodedAppBackup(
@@ -27,7 +29,7 @@ data class DecodedAppBackup(
 )
 
 object BackupCodec {
-    private const val SCHEMA_VERSION = 1
+    private const val SCHEMA_VERSION = 2
 
     fun encode(snapshot: DatabaseSnapshot, featureStoreJson: String): String {
         val root = JSONObject()
@@ -36,6 +38,7 @@ object BackupCodec {
             .put("shifts", JSONArray().apply { snapshot.shifts.forEach { put(shiftToJson(it)) } })
             .put("rules", JSONArray().apply { snapshot.rules.forEach { put(ruleToJson(it)) } })
             .put("selections", JSONArray().apply { snapshot.selections.forEach { put(selectionToJson(it)) } })
+            .put("paySnapshots", JSONArray().apply { snapshot.paySnapshots.forEach { put(paySnapshotToJson(it)) } })
             .put("features", JSONObject(featureStoreJson))
         return root.toString(2)
     }
@@ -47,8 +50,9 @@ object BackupCodec {
         val shifts = root.getJSONArray("shifts").objects(::shiftFromJson)
         val rules = root.getJSONArray("rules").objects(::ruleFromJson)
         val selections = root.getJSONArray("selections").objects(::selectionFromJson)
+        val paySnapshots = root.optJSONArray("paySnapshots")?.objects(::paySnapshotFromJson).orEmpty()
         val features = root.optJSONObject("features")?.toString() ?: "{}"
-        return DecodedAppBackup(DatabaseSnapshot(workers, shifts, rules, selections), features)
+        return DecodedAppBackup(DatabaseSnapshot(workers, shifts, rules, selections, paySnapshots), features)
     }
 
     private fun workerToJson(v: WorkerEntity) = JSONObject()
@@ -153,6 +157,21 @@ object BackupCodec {
     private fun selectionFromJson(o: JSONObject) = ShiftAllowanceSelectionEntity(
         shiftId = o.getLong("shiftId"),
         ruleId = o.getLong("ruleId")
+    )
+
+    private fun paySnapshotToJson(v: ShiftPaySnapshotEntity) = JSONObject()
+        .put("shiftId", v.shiftId)
+        .put("totalMinutes", v.totalMinutes)
+        .put("basePayCents", v.basePayCents)
+        .put("allowanceLines", JSONArray(v.allowanceLinesJson))
+        .put("savedAtEpochMillis", v.savedAtEpochMillis)
+
+    private fun paySnapshotFromJson(o: JSONObject) = ShiftPaySnapshotEntity(
+        shiftId = o.getLong("shiftId"),
+        totalMinutes = o.getLong("totalMinutes"),
+        basePayCents = o.getLong("basePayCents"),
+        allowanceLinesJson = o.getJSONArray("allowanceLines").toString(),
+        savedAtEpochMillis = o.getLong("savedAtEpochMillis")
     )
 
     private fun JSONObject.putNullable(key: String, value: Any?): JSONObject = apply {
