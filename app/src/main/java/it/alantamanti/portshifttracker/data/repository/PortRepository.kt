@@ -67,11 +67,10 @@ class PortRepository(
 
         return ss.mapNotNull { shift ->
             val worker = workerMap[shift.workerId] ?: return@mapNotNull null
-            val selectedIds = normalizeSelectedRuleIds(
-                shift.performanceType,
-                selectedByShift[shift.id].orEmpty(),
-                rs
-            )
+            val persistedIds = selectedByShift[shift.id].orEmpty()
+            val selectedIds = if (isStandaloneCongedoSelection(shift.performanceType, persistedIds, rs)) {
+                persistedIds
+            } else normalizeSelectedRuleIds(shift.performanceType, persistedIds, rs)
             val breakdown = snapshotsByShiftId[shift.id]?.toBreakdown()
                 ?: calculator.calculate(worker.toDomain(), shift.toDomain(), domainRules, selectedIds)
             val selectedRules = selectedIds.mapNotNull { rulesById[it] }
