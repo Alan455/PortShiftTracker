@@ -1198,7 +1198,7 @@ private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
 }
 
 // Include legacy/custom display-name duplicates, not only the catalog code.
-private fun isFestiveDisdettaRule(rule: AllowanceRuleEntity): Boolean =
+internal fun isFestiveDisdettaRule(rule: AllowanceRuleEntity): Boolean =
     rule.code.trim().equals("AVV_DIS_CASA_FEST", ignoreCase = true) ||
         rule.name.trim().equals("Disdetta casa festiva", ignoreCase = true)
 
