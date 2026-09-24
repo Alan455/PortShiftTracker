@@ -99,7 +99,10 @@ class PortRepository(
             if (!seen.add(key)) throw DuplicatePerformanceException(date, shift.performanceType)
             ensureNoDuplicate(shift)
 
-            val normalized = normalizeSelectedRuleIds(shift.performanceType, selectedRuleIds, allRules)
+            val normalized =
+                if (isStandaloneCongedoSelection(shift.performanceType, selectedRuleIds, allRules)) {
+                    selectedRuleIds
+                } else normalizeSelectedRuleIds(shift.performanceType, selectedRuleIds, allRules)
             if (!isStandaloneCongedoSelection(shift.performanceType, normalized, allRules)) {
                 selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
                     throw IllegalArgumentException(it)
@@ -122,7 +125,10 @@ class PortRepository(
         val allRules = ruleDao.getAll()
         val canonical = canonicalShift(shift)
         ensureNoDuplicate(canonical, excludeId = canonical.id)
-        val normalized = normalizeSelectedRuleIds(canonical.performanceType, selectedRuleIds, allRules)
+        val normalized =
+            if (isStandaloneCongedoSelection(canonical.performanceType, selectedRuleIds, allRules)) {
+                selectedRuleIds
+            } else normalizeSelectedRuleIds(canonical.performanceType, selectedRuleIds, allRules)
         if (!isStandaloneCongedoSelection(shift.performanceType, normalized, allRules)) {
             selectionValidationMessage(shift.performanceType, normalized, allRules)?.let {
                 throw IllegalArgumentException(it)
