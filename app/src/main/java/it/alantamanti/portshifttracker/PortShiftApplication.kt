@@ -137,19 +137,27 @@ class PortShiftApplication : Application() {
                 "WHERE code IN ('DOP_TU_MEZZO','DOP_ON_MEZZO')"
         )
 
-        // Giornaliero: base fissa €90 sul primo turno. Con ONMezzo il motore usa il 50%.
-        // Nel Doppio la voce DOP_G rappresenta invece il solo Mezzo Giornaliero da €45.
+        // Structural rule corrections must never overwrite user rates.
+        // Giornaliero can now be changed from the tariff editor.
         db.openHelper.writableDatabase.execSQL(
-            "UPDATE allowance_rules SET name = 'Giornaliero', value = 9000, " +
+            "UPDATE allowance_rules SET name = 'Giornaliero', " +
                 "category = 'TURNO', exclusiveGroup = 'TIPO_TURNO', " +
-                "basePayEffect = 'REPLACE_BASE', performanceMask = 1, enabled = 1 " +
+                "basePayEffect = 'REPLACE_BASE', performanceMask = 1 " +
                 "WHERE code = 'G'"
         )
         db.openHelper.writableDatabase.execSQL(
-            "UPDATE allowance_rules SET name = 'Mezzo Giornaliero', value = 4500, " +
+            "UPDATE allowance_rules SET name = 'Mezzo Giornaliero', " +
                 "category = 'DOPPIO', exclusiveGroup = 'DOPPIO', " +
-                "basePayEffect = 'REPLACE_BASE', performanceMask = 2, enabled = 1 " +
+                "basePayEffect = 'REPLACE_BASE', performanceMask = 2 " +
                 "WHERE code = 'DOP_G'"
+        )
+        // Derived amounts are linked to the configurable Giornaliero, never
+        // to hardcoded 90/45 euro constants.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET value = " +
+                "(SELECT (value + 1) / 2 FROM allowance_rules WHERE code = 'G') " +
+                "WHERE code IN ('DOP_G','DOP_ON_MEZZO') " +
+                "AND EXISTS(SELECT 1 FROM allowance_rules WHERE code = 'G')"
         )
 
         // Converte la vecchia voce Giornaliero da €87 nel nuovo Giornaliero strutturale da €90.
