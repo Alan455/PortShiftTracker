@@ -106,7 +106,7 @@ object DefaultCatalog {
             performanceMask = PerformanceType.TURNO.maskBit
         ))
         add(fixed(
-            "DOP_ON_MEZZO", "ONmezzo", 4350, AllowanceCategory.MEZZO_TURNO, 411,
+            "DOP_ON_MEZZO", "ONmezzo", 4500, AllowanceCategory.MEZZO_TURNO, 411,
             group = "MEZZO_TURNO",
             basePayEffect = BasePayEffect.REPLACE_BASE,
             turnAllowanceMultiplierBasisPoints = 5000,
