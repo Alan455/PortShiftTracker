@@ -1191,11 +1191,20 @@ internal fun RuleEditorDialog(
                         }
                     }
                 }
+                if (initial?.code in setOf("DOP_G", "DOP_ON_MEZZO")) {
+                    item {
+                        Text(
+                            "Importo derivato: modifica la tariffa Giornaliero per aggiornare automaticamente questo valore.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
                 item {
                     OutlinedTextField(
                         value = valueText,
                         onValueChange = { valueText = it },
                         label = { Text(if (type == AllowanceCalculationType.PERCENT_BASE) "Percentuale" else "Importo €") },
+                        enabled = initial?.code !in setOf("DOP_G", "DOP_ON_MEZZO"),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1493,7 +1502,7 @@ internal fun ruleValueLabel(rule: AllowanceRuleEntity, performanceType: Performa
     if (rule.calculationType == AllowanceCalculationType.PERCENT_BASE) return "${rule.value / 100.0}%"
     if (rule.calculationType == AllowanceCalculationType.PER_HOUR) return "${money(rule.value)}/h"
     val cents = when {
-        rule.code == "DOP_ON_MEZZO" -> 4500L // half of the €90 Giornaliero
+        rule.code == "DOP_ON_MEZZO" -> rule.value // synchronized with half of configurable Giornaliero
         performanceType == PerformanceType.MEZZO_DOPPIO &&
             rule.category == AllowanceCategory.DOPPIO -> (rule.value / 2.0).roundToLong()
         else -> rule.value
