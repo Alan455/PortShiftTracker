@@ -244,6 +244,67 @@ class PortRepository(
                 .forEach { derived -> ruleDao.upsert(derived.copy(value = half)) }
         }
     }
+    /**
+     * Explicit economic bug correction, not an ordinary tariff edit. It updates
+     * only lines for one rule across all previously recorded performances.
+     * Callers must supply the verified rule-specific correction formula.
+     */
+    suspend fun correctHistoricAllowanceLine(
+        ruleCode: String,
+        correctedAmount: (ShiftEntity, Long) -> Long
+    ): Int = db.withTransaction {
+        backfillMissingPaySnapshotsWithinTransaction()
+        val matchingIds = ruleDao.getAll()
+            .filter { it.code == ruleCode }.mapTo(mutableSetOf()) { it.id }
+        if (matchingIds.isEmpty()) return@withTransaction 0
+        val shiftsById = shiftDao.getAll().associateBy { it.id }
+        var corrections = 0
+        paySnapshotDao.getAll().forEach { snapshot ->
+            val shift = shiftsById[snapshot.shiftId] ?: return@forEach
+            val old = snapshot.toBreakdown()
+            val revised = old.allowanceLines.map { line ->
+                if (line.ruleId in matchingIds) {
+                    line.copy(amountCents = correctedAmount(shift, line.amountCents))
+                } else line
+            }
+            if (old.allowanceLines != revised) {
+                paySnapshotDao.upsert(
+                    ShiftPaySnapshotEntity.fromBreakdown(
+                        snapshot.shiftId, old.copy(allowanceLines = revised),
+                        snapshot.savedAtEpochMillis
+                    )
+                )
+                corrections++
+            }
+        }
+        corrections
+    }
+
+    /**
+     * Explicit retroactive fix for a paid absence that replaces an entire
+     * performance (e.g. Congedo). Does not touch unrelated shift snapshots.
+     */
+    suspend fun correctHistoricExclusiveAbsence(ruleCode: String, amountCents: Long): Int =
+        db.withTransaction {
+            require(amountCents >= 0L)
+            backfillMissingPaySnapshotsWithinTransaction()
+            val ids = ruleDao.getAll().filter { it.code == ruleCode }
+                .mapTo(mutableSetOf()) { it.id }
+            if (ids.isEmpty()) return@withTransaction 0
+            val affected = selectionDao.getAll().asSequence()
+                .filter { it.ruleId in ids }.map { it.shiftId }.toSet()
+            var corrections = 0
+            paySnapshotDao.getAll().filter { it.shiftId in affected }.forEach { snapshot ->
+                if (snapshot.basePayCents != amountCents || snapshot.toBreakdown().allowanceLines.isNotEmpty()) {
+                    paySnapshotDao.upsert(
+                        snapshot.copy(basePayCents = amountCents, allowanceLinesJson = "[]")
+                    )
+                    corrections++
+                }
+            }
+            corrections
+        }
+
     suspend fun deleteRule(rule: AllowanceRuleEntity) = db.withTransaction {
         backfillMissingPaySnapshotsWithinTransaction()
         ruleDao.delete(rule)
