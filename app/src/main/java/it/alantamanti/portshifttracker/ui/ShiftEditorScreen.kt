@@ -572,10 +572,10 @@ internal fun ShiftEditorScreen(
                             InfoPanel(
                                 when {
                                     isGiornaliero ->
-                                        "Base fissa € 90,00. Polivalenza automatica. Con ONMezzo la base diventa € 45,00 e viene aggiunta automaticamente Mezza IMA."
+                                        "Base Giornaliero configurabile. Polivalenza automatica. Con ONMezzo la base si dimezza e viene aggiunta automaticamente Mezza IMA."
                                     performanceType == PerformanceType.DOPPIO &&
                                         quickKind == QuickShiftKind.GIORNALIERO ->
-                                        "Mezzo Giornaliero: base fissa € 45,00. Non riceve Mezza IMA né Polivalenza; Area, Disagi, Avviamento e Altre Voci restano disponibili."
+                                        "Mezzo Giornaliero: base pari a metà del Giornaliero configurato. Non riceve Mezza IMA né Polivalenza; Area, Disagi, Avviamento e Altre Voci restano disponibili."
                                     else -> performanceInfo(worker, performanceType)
                                 }
                             )
@@ -1160,7 +1160,7 @@ private fun GuidedExpandableRow(
 private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
     val (code, title, subtitle) = when (entry) {
         GuidedEntryKind.FIRST_TURNO -> Triple("T", "Turno", "Scegli M, P, S, S2 o N")
-        GuidedEntryKind.FIRST_GIORNALIERO -> Triple("G", "Giornaliero", "Base € 90,00 · ONMezzo disponibile")
+        GuidedEntryKind.FIRST_GIORNALIERO -> Triple("G", "Giornaliero", "Base configurabile · ONMezzo disponibile")
         GuidedEntryKind.ABS_FERIE -> Triple("Ff", "Ferie", "Assenza")
         GuidedEntryKind.ABS_MALATTIA -> Triple("Mm", "Malattia", "Assenza")
         GuidedEntryKind.ABS_CONGEDO -> Triple("PC", "Congedo", "Assenza")
