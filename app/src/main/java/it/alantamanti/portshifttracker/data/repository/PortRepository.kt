@@ -5,6 +5,7 @@ import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
 import it.alantamanti.portshifttracker.data.local.AppDatabase
 import it.alantamanti.portshifttracker.data.local.ShiftAllowanceSelectionEntity
 import it.alantamanti.portshifttracker.data.local.ShiftEntity
+import it.alantamanti.portshifttracker.data.local.ShiftPaySnapshotEntity
 import it.alantamanti.portshifttracker.data.local.WorkerEntity
 import it.alantamanti.portshifttracker.domain.AllowanceCalculator
 import it.alantamanti.portshifttracker.domain.AllowanceRule
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlin.math.roundToLong
 
 class PortRepository(
     private val db: AppDatabase,
@@ -25,34 +27,40 @@ class PortRepository(
     private val shiftDao = db.shiftDao()
     private val ruleDao = db.allowanceRuleDao()
     private val selectionDao = db.shiftAllowanceSelectionDao()
+    private val paySnapshotDao = db.shiftPaySnapshotDao()
 
     val workers: Flow<List<WorkerEntity>> = workerDao.observeAll()
     val shifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
     val rules: Flow<List<AllowanceRuleEntity>> = ruleDao.observeAll()
     val selections: Flow<List<ShiftAllowanceSelectionEntity>> = selectionDao.observeAll()
 
-    val shiftRows: Flow<List<ShiftWithPay>> = combine(workers, shifts, rules, selections) { ws, ss, rs, sels ->
-        buildRows(ws, ss, rs, sels)
-    }
+    val shiftRows: Flow<List<ShiftWithPay>> =
+        combine(workers, shifts, rules, selections, paySnapshotDao.observeAll()) { ws, ss, rs, sels, snaps ->
+            buildRows(ws, ss, rs, sels, snaps)
+        }
 
     fun shiftRowsBetween(startInclusive: Long, endExclusive: Long): Flow<List<ShiftWithPay>> =
         combine(
             workers,
             shiftDao.observeBetween(startInclusive, endExclusive),
             rules,
-            selectionDao.observeForShiftRange(startInclusive, endExclusive)
-        ) { ws, ss, rs, sels ->
-            buildRows(ws, ss, rs, sels)
+            selectionDao.observeForShiftRange(startInclusive, endExclusive),
+            paySnapshotDao.observeForShiftRange(startInclusive, endExclusive)
+        ) { ws, ss, rs, sels, snaps ->
+            buildRows(ws, ss, rs, sels, snaps)
         }
 
     private fun buildRows(
         ws: List<WorkerEntity>,
         ss: List<ShiftEntity>,
         rs: List<AllowanceRuleEntity>,
-        sels: List<ShiftAllowanceSelectionEntity>
+        sels: List<ShiftAllowanceSelectionEntity>,
+        snapshots: List<ShiftPaySnapshotEntity>
     ): List<ShiftWithPay> {
         val workerMap = ws.associateBy { it.id }
         val rulesById = rs.associateBy { it.id }
+        val snapshotsByShiftId = snapshots.associateBy { it.shiftId }
+        val domainRules = rs.map { it.toDomain() }
         val selectedByShift = sels.groupBy { it.shiftId }.mapValues { (_, rows) -> rows.map { it.ruleId }.toSet() }
 
         return ss.mapNotNull { shift ->
@@ -62,19 +70,38 @@ class PortRepository(
                 selectedByShift[shift.id].orEmpty(),
                 rs
             )
-            val breakdown = calculator.calculate(
-                worker.toDomain(),
-                shift.toDomain(),
-                rs.map { it.toDomain() },
-                selectedIds
-            )
+            val breakdown = snapshotsByShiftId[shift.id]?.toBreakdown()
+                ?: calculator.calculate(worker.toDomain(), shift.toDomain(), domainRules, selectedIds)
             val selectedRules = selectedIds.mapNotNull { rulesById[it] }
                 .sortedWith(compareBy<AllowanceRuleEntity> { it.category.ordinal }.thenBy { it.priority }.thenBy { it.name })
             ShiftWithPay(shift, worker, breakdown, selectedRules)
         }
     }
 
-    suspend fun saveWorker(worker: WorkerEntity) = workerDao.upsert(worker)
+    /**
+     * Freeze legacy records once, after known bug fixes, before a user can
+     * change a rate. A snapshot is never replaced by an ordinary rate edit.
+     */
+    suspend fun backfillMissingPaySnapshots() = db.withTransaction {
+        backfillMissingPaySnapshotsWithinTransaction()
+    }
+
+    private suspend fun backfillMissingPaySnapshotsWithinTransaction() {
+        val existing = paySnapshotDao.getAll()
+        val rows = buildRows(
+            workerDao.getAll(), shiftDao.getAll(), ruleDao.getAll(),
+            selectionDao.getAll(), existing
+        )
+        val savedIds = existing.mapTo(mutableSetOf()) { it.shiftId }
+        rows.filter { it.shift.id !in savedIds }.forEach { row ->
+            paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(row.shift.id, row.pay))
+        }
+    }
+
+    suspend fun saveWorker(worker: WorkerEntity) = db.withTransaction {
+        backfillMissingPaySnapshotsWithinTransaction()
+        workerDao.upsert(worker)
+    }
 
     suspend fun addShiftWithSelections(shift: ShiftEntity, selectedRuleIds: Set<Long>): Long =
         addShiftsWithSelections(listOf(shift), selectedRuleIds).single()
@@ -89,6 +116,8 @@ class PortRepository(
     ): List<Long> = db.withTransaction {
         require(shifts.isNotEmpty()) { "Nessuna prestazione da salvare" }
         val allRules = ruleDao.getAll()
+        val workerById = workerDao.getAll().associateBy { it.id }
+        val domainRules = allRules.map { it.toDomain() }
         val seen = mutableSetOf<Triple<Long, LocalDate, it.alantamanti.portshifttracker.domain.PerformanceType>>()
         val result = mutableListOf<Long>()
 
@@ -113,6 +142,11 @@ class PortRepository(
             if (normalized.isNotEmpty()) {
                 selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(shiftId, it) })
             }
+            val worker = requireNotNull(workerById[shift.workerId]) { "Lavoratore inesistente" }
+            val pay = calculator.calculate(
+                worker.toDomain(), shift.copy(id = shiftId).toDomain(), domainRules, normalized
+            )
+            paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(shiftId, pay))
             result += shiftId
         }
         result
@@ -140,6 +174,11 @@ class PortRepository(
         if (normalized.isNotEmpty()) {
             selectionDao.insertAll(normalized.map { ShiftAllowanceSelectionEntity(canonical.id, it) })
         }
+        val worker = requireNotNull(workerDao.getAll().firstOrNull { it.id == canonical.workerId })
+        val pay = calculator.calculate(
+            worker.toDomain(), canonical.toDomain(), allRules.map { it.toDomain() }, normalized
+        )
+        paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(canonical.id, pay))
     }
 
     private suspend fun ensureNoDuplicate(shift: ShiftEntity, excludeId: Long = 0) {
@@ -172,20 +211,43 @@ class PortRepository(
         if (selectedRuleIds.isNotEmpty()) {
             selectionDao.insertAll(selectedRuleIds.map { ShiftAllowanceSelectionEntity(canonical.id, it) })
         }
+        val rules = ruleDao.getAll()
+        val worker = requireNotNull(workerDao.getAll().firstOrNull { it.id == canonical.workerId })
+        val pay = calculator.calculate(
+            worker.toDomain(), canonical.toDomain(), rules.map { it.toDomain() }, selectedRuleIds
+        )
+        paySnapshotDao.upsert(ShiftPaySnapshotEntity.fromBreakdown(canonical.id, pay))
     }
 
-    suspend fun saveRule(rule: AllowanceRuleEntity) = ruleDao.upsert(rule)
-    suspend fun deleteRule(rule: AllowanceRuleEntity) = ruleDao.delete(rule)
+    suspend fun saveRule(rule: AllowanceRuleEntity) = db.withTransaction {
+        backfillMissingPaySnapshotsWithinTransaction()
+        ruleDao.upsert(rule)
+        // DOP_G and ONMezzo are derived from the current Giornaliero base.
+        if (rule.code == "G") {
+            val half = ((rule.value / 2.0).roundToLong())
+            ruleDao.getAll().filter { it.code == "DOP_G" || it.code == "DOP_ON_MEZZO" }
+                .forEach { derived -> ruleDao.upsert(derived.copy(value = half)) }
+        }
+    }
+    suspend fun deleteRule(rule: AllowanceRuleEntity) = db.withTransaction {
+        backfillMissingPaySnapshotsWithinTransaction()
+        ruleDao.delete(rule)
+    }
 
-    suspend fun exportSnapshot(): DatabaseSnapshot = DatabaseSnapshot(
-        workers = workerDao.getAll(),
-        shifts = shiftDao.getAll(),
-        rules = ruleDao.getAll(),
-        selections = selectionDao.getAll()
-    )
+    suspend fun exportSnapshot(): DatabaseSnapshot = db.withTransaction {
+        backfillMissingPaySnapshotsWithinTransaction()
+        DatabaseSnapshot(
+            workers = workerDao.getAll(),
+            shifts = shiftDao.getAll(),
+            rules = ruleDao.getAll(),
+            selections = selectionDao.getAll(),
+            paySnapshots = paySnapshotDao.getAll()
+        )
+    }
 
     suspend fun restoreSnapshot(snapshot: DatabaseSnapshot) = db.withTransaction {
         selectionDao.deleteAll()
+        paySnapshotDao.deleteAll()
         shiftDao.deleteAll()
         ruleDao.deleteAll()
         workerDao.deleteAll()
@@ -194,6 +256,9 @@ class PortRepository(
         ruleDao.insertAll(snapshot.rules)
         shiftDao.insertAll(snapshot.shifts)
         if (snapshot.selections.isNotEmpty()) selectionDao.insertAll(snapshot.selections)
+        if (snapshot.paySnapshots.isNotEmpty()) paySnapshotDao.insertAll(snapshot.paySnapshots)
+        // Backups from schema v1 have no frozen pay: reconstruct them once.
+        backfillMissingPaySnapshotsWithinTransaction()
     }
 }
 
