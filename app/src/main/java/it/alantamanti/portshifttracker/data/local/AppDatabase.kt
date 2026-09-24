@@ -9,9 +9,10 @@ import androidx.room.TypeConverters
         WorkerEntity::class,
         ShiftEntity::class,
         AllowanceRuleEntity::class,
-        ShiftAllowanceSelectionEntity::class
+        ShiftAllowanceSelectionEntity::class,
+        ShiftPaySnapshotEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -20,4 +21,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun shiftDao(): ShiftDao
     abstract fun allowanceRuleDao(): AllowanceRuleDao
     abstract fun shiftAllowanceSelectionDao(): ShiftAllowanceSelectionDao
+    abstract fun shiftPaySnapshotDao(): ShiftPaySnapshotDao
 }
