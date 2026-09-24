@@ -22,7 +22,7 @@ class PortShiftApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val db = Room.databaseBuilder(this, AppDatabase::class.java, "port_shift.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
         repository = PortRepository(db)
 
@@ -182,9 +182,34 @@ class PortShiftApplication : Application() {
                 db.shiftDao().update(shift.copy(serviceEpochDay = date.toEpochDay()))
             }
         }
+        // Backfill only AFTER known economic bug corrections and legacy rule
+        // normalization. Running again must never replace a frozen snapshot.
+        repository.backfillMissingPaySnapshots()
     }
 
     companion object {
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS shift_pay_snapshots (
+                        shiftId INTEGER NOT NULL PRIMARY KEY,
+                        totalMinutes INTEGER NOT NULL,
+                        basePayCents INTEGER NOT NULL,
+                        allowanceLinesJson TEXT NOT NULL,
+                        savedAtEpochMillis INTEGER NOT NULL,
+                        FOREIGN KEY(shiftId) REFERENCES shifts(id)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_shift_pay_snapshots_shiftId " +
+                        "ON shift_pay_snapshots(shiftId)"
+                )
+            }
+        }
+
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE workers ADD COLUMN basePayMode TEXT NOT NULL DEFAULT 'HOURLY'")
