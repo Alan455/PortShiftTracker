@@ -1,7 +1,8 @@
 package it.alantamanti.portshifttracker.ui
 
+import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import it.alantamanti.portshifttracker.data.local.AllowanceRuleEntity
@@ -11,12 +12,15 @@ import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.PerformanceType
 import org.junit.Assert.assertTrue
 import org.junit.Rule
+import org.junit.runner.RunWith
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import java.time.LocalDate
 
+@RunWith(AndroidJUnit4::class)
 class QuickShiftPanelTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun doppio_saturday_shows_five_quick_shifts_without_half_giornaliero() {
@@ -32,6 +36,8 @@ class QuickShiftPanelTest {
                 )
             }
         }
+
+        compose.waitForIdle()
 
         compose.onNodeWithText("Mat").fetchSemanticsNode()
         compose.onNodeWithText("Pom").fetchSemanticsNode()
@@ -59,6 +65,8 @@ class QuickShiftPanelTest {
         }
 
         // A previously selected ½G remains visible, but it is not a quick-shift tile.
+        compose.waitForIdle()
+
         compose.onNodeWithText("Voce storica: ½G").fetchSemanticsNode()
         compose.onNodeWithText(
             "Questa voce resta visibile per lo storico ma non è disponibile nei nuovi inserimenti."
