@@ -19,7 +19,7 @@ class QuickShiftPanelTest {
     val compose = createComposeRule()
 
     @Test
-    fun doppio_saturday_shows_three_shift_choices_and_half_giornaliero() {
+    fun doppio_saturday_shows_five_quick_shifts_without_half_giornaliero() {
         compose.setContent {
             MaterialTheme {
                 QuickShiftPanel(
@@ -33,16 +33,17 @@ class QuickShiftPanelTest {
             }
         }
 
+        compose.onNodeWithText("Mat").fetchSemanticsNode()
         compose.onNodeWithText("Pom").fetchSemanticsNode()
         compose.onNodeWithText("Sera").fetchSemanticsNode()
         compose.onNodeWithText("Sera2").fetchSemanticsNode()
-        compose.onNodeWithText("½ Giornaliero").fetchSemanticsNode()
-        assertTrue(compose.onAllNodesWithText("Mattina").fetchSemanticsNodes().isEmpty())
-        assertTrue(compose.onAllNodesWithText("Notte").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Notte").fetchSemanticsNode()
+        // ½ Giornaliero is selected from the separate guided Doppio flow.
+        assertTrue(compose.onAllNodesWithText("½ Giornaliero").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
-    fun half_giornaliero_is_an_active_doppio_choice_at_45_euro() {
+    fun half_giornaliero_is_a_separate_doppio_choice_not_a_quick_shift() {
         val rules = doppioRules()
         compose.setContent {
             MaterialTheme {
@@ -57,9 +58,12 @@ class QuickShiftPanelTest {
             }
         }
 
-        compose.onNodeWithText("Selezionato: ½G").fetchSemanticsNode()
-        compose.onNodeWithText("Mezzo Giornaliero: base fissa €45, senza Mezza IMA e senza Polivalenza.")
-            .fetchSemanticsNode()
+        // A previously selected ½G remains visible, but it is not a quick-shift tile.
+        compose.onNodeWithText("Voce storica: ½G").fetchSemanticsNode()
+        compose.onNodeWithText(
+            "Questa voce resta visibile per lo storico ma non è disponibile nei nuovi inserimenti."
+        ).fetchSemanticsNode()
+        assertTrue(compose.onAllNodesWithText("½ Giornaliero").fetchSemanticsNodes().isEmpty())
     }
 
     private fun doppioRules() = listOf(
