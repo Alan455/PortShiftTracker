@@ -150,7 +150,8 @@ internal fun SettingsScreen(repository: PortRepository) {
                     }
                 }
                 Text(
-                    "Il Mezzo Doppio è sempre il 50% della base Doppio.",
+                    "Il Mezzo Doppio è sempre il 50% della base Doppio. " +
+                        "Le modifiche alle tariffe valgono solo per le prestazioni salvate successivamente.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

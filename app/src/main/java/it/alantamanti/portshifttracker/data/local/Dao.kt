@@ -66,6 +66,10 @@ interface ShiftDao {
     @Update
     suspend fun update(shift: ShiftEntity)
 
+    /** Update a note without rewriting times, selected allowances or pay snapshots. */
+    @Query("UPDATE shifts SET notes = :notes WHERE id = :shiftId")
+    suspend fun updateNotes(shiftId: Long, notes: String): Int
+
     @Delete
     suspend fun delete(shift: ShiftEntity)
 

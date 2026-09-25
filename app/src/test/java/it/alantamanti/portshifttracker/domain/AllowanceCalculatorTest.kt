@@ -268,7 +268,7 @@ class AllowanceCalculatorTest {
     }
 
     @Test
-    fun mezzoDoppioNonDimezzaMattinaFestiva() {
+    fun mezzoDoppioDimezzaAncheMattinaFestiva() {
         val mattinaFestivaDoppio = AllowanceRule(
             id = 20,
             name = "MatF Doppio",
@@ -288,11 +288,86 @@ class AllowanceCalculatorTest {
         )
 
         assertEquals(4420, pay.basePayCents)
-        assertTrue(pay.allowanceLines.any { it.name == "MatF Doppio" && it.amountCents == 4793L })
+        assertTrue(pay.allowanceLines.any { it.name == "MatF Doppio" && it.amountCents == 2397L })
         assertTrue(pay.allowanceLines.any { it.name == "A5" && it.amountCents == 1330L })
         assertTrue(pay.allowanceLines.any { it.name == "Tubi" && it.amountCents == 775L })
         assertFalse(pay.allowanceLines.any { it.name == "Mezza IMA" })
         assertFalse(pay.allowanceLines.any { it.name == "Polivalenza" })
+    }
+
+    @Test
+    fun congedoDonazioneAndInailReplaceBaseWithoutAnyExtraEvenWithOldSelections() {
+        val absences = listOf(
+            Triple("AVV_CONGEDO", 3000L, "Congedo"),
+            Triple("AVV_DS", 9500L, "Donazione sangue"),
+            Triple("AVV_INAIL", 6780L, "Inail")
+        )
+        absences.forEachIndexed { index, (code, cents, label) ->
+            val absence = AllowanceRule(
+                id = 100L + index,
+                name = label,
+                code = code,
+                calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+                value = cents,
+                category = AllowanceCategory.ALTRE_VOCI,
+                applicationMode = AllowanceApplicationMode.MANUAL,
+                // Simulate legacy persisted rules still marked as ADDITIVE.
+                basePayEffect = BasePayEffect.ADDITIVE,
+                performanceMask = PerformanceType.TURNO.maskBit
+            )
+            val pay = calculator.calculate(
+                worker,
+                shift(PerformanceType.TURNO, "2026-09-17T08:00:00", "2026-09-17T14:00:00"),
+                listOf(absence, area, turnoNotte, polivalenza),
+                setOf(absence.id, area.id, turnoNotte.id)
+            )
+            assertEquals(code, cents, pay.basePayCents)
+            assertEquals(code, cents, pay.totalPayCents)
+            assertTrue(code, pay.allowanceLines.isEmpty())
+        }
+    }
+
+    @Test
+    fun fuoriOrarioIsFixedPerSelectionRegardlessOfShiftDuration() {
+        val outsideHours = AllowanceRule(
+            id = 200,
+            name = "FuoriOrario",
+            code = "AVV_FUORI_ORARIO_H",
+            calculationType = AllowanceCalculationType.FIXED_PER_SHIFT,
+            value = 775,
+            category = AllowanceCategory.AVVIAMENTO,
+            applicationMode = AllowanceApplicationMode.MANUAL
+        )
+        listOf(
+            "2026-09-17T08:00:00" to "2026-09-17T09:00:00",
+            "2026-09-17T08:00:00" to "2026-09-17T14:00:00",
+            "2026-09-17T08:00:00" to "2026-09-17T16:00:00"
+        ).forEach { (start, end) ->
+            val pay = calculator.calculate(
+                worker, shift(PerformanceType.TURNO, start, end),
+                listOf(outsideHours), setOf(outsideHours.id)
+            )
+            assertEquals(775L, pay.allowanceLines.single().amountCents)
+            assertEquals(7555L, pay.totalPayCents)
+        }
+    }
+
+    @Test
+    fun catalogUsesExclusiveAbsencesAndFixedOutsideHours() {
+        val catalog = it.alantamanti.portshifttracker.data.local.DefaultCatalog.rules()
+            .associateBy { it.code }
+        mapOf(
+            "AVV_CONGEDO" to 3000L,
+            "AVV_DS" to 9500L,
+            "AVV_INAIL" to 6780L
+        ).forEach { (code, amount) ->
+            val rule = requireNotNull(catalog[code])
+            assertEquals(amount, rule.value)
+            assertEquals(BasePayEffect.REPLACE_BASE, rule.basePayEffect)
+        }
+        val outsideHours = requireNotNull(catalog["AVV_FUORI_ORARIO_H"])
+        assertEquals(775L, outsideHours.value)
+        assertEquals(AllowanceCalculationType.FIXED_PER_SHIFT, outsideHours.calculationType)
     }
 
     private fun shift(type: PerformanceType, start: String, end: String): Shift = Shift(

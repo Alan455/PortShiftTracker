@@ -9,13 +9,6 @@ import java.time.ZonedDateTime
 import kotlin.math.roundToLong
 
 class AllowanceCalculator {
-    private val halfDoubleTurnAllowanceCodes = setOf(
-        "DOP_POM", "DOP_POMS", "DOP_POMF",
-        "DOP_SERA", "DOP_SERAS", "DOP_SERAF",
-        "DOP_SERA2", "DOP_SERAS2", "DOP_SERAF2",
-        "DOP_NOTTE", "DOP_NOTTEF"
-    )
-
     fun calculate(
         worker: Worker,
         shift: Shift,
@@ -81,6 +74,17 @@ class AllowanceCalculator {
             .sortedBy { it.priority }
             .toList()
 
+        // Congedo, Donazione sangue e INAIL sono assenze a importo unico:
+        // la loro tariffa sostituisce la base e non si sommano altre indennità
+        // (anche se vecchie selezioni o backup contengono voci aggiuntive).
+        // IMA resta una voce diversa: può avere Disdetta casa/festiva.
+        val exclusivePaidAbsence = applicableRules.firstOrNull {
+            it.code == "AVV_CONGEDO" || it.code == "AVV_DS" || it.code == "AVV_INAIL"
+        }
+        if (exclusivePaidAbsence != null) {
+            return PayBreakdown(totalMinutes, exclusivePaidAbsence.value, emptyList())
+        }
+
         // Ferie, Malattia, IMA e Giornaliero possono sostituire la base ordinaria.
         val replacementRule = applicableRules
             .filter { it.basePayEffect == BasePayEffect.REPLACE_BASE }
@@ -112,11 +116,11 @@ class AllowanceCalculator {
                 calculateRule(shift, rule, performanceBasePay)?.let { line ->
                     val multiplierBp = when {
                         rule.category == AllowanceCategory.TURNO && turnMultiplierBp != 10000 -> turnMultiplierBp
-                        // Nel Mezzo Doppio si dimezzano SOLO Pom/Sera/Sera2/Notte
-                        // e le relative varianti sabato/festive. Mattina (anche festiva),
-                        // Area, Disagi, Pioggia e Avviamento restano interi.
+                        // Nel Mezzo Doppio TUTTE le indennità di turno (categoria DOPPIO)
+                        // sono dimezzate, inclusa Mattina festiva. Area, Disagi,
+                        // Pioggia e Avviamento restano interi.
                         shift.performanceType == PerformanceType.MEZZO_DOPPIO &&
-                            rule.code in halfDoubleTurnAllowanceCodes -> 5000
+                            rule.category == AllowanceCategory.DOPPIO -> 5000
                         else -> 10000
                     }
                     if (multiplierBp != 10000) {

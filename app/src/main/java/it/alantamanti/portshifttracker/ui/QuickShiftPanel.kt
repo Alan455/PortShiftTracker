@@ -86,7 +86,7 @@ internal fun QuickShiftPanel(
                     ) {
                         Text(
                             if (performanceType == PerformanceType.MEZZO_DOPPIO) {
-                                "Base ${moneyQuick((doubleBaseCents / 2.0).roundToLong())}; Pom/Sera/S2/Notte al 50%, Mattina intera"
+                                "Base ${moneyQuick((doubleBaseCents / 2.0).roundToLong())}; tutte le indennità di turno al 50%"
                             } else {
                                 "Base ${moneyQuick(doubleBaseCents)}; indennità di turno intera"
                             },
@@ -255,11 +255,8 @@ private fun QuickShiftTile(
                 rule?.let {
                     val amount = moneyQuick(it.value)
                     when {
-                        performanceType == PerformanceType.MEZZO_DOPPIO &&
-                            resolution.ruleCode in halfDoubleTurnAllowanceCodes ->
-                            "+${moneyQuick((it.value / 2.0).roundToLong())}"
                         performanceType == PerformanceType.MEZZO_DOPPIO ->
-                            "+$amount"
+                            "+${moneyQuick((it.value / 2.0).roundToLong())}"
                         performanceType == PerformanceType.DOPPIO -> "+$amount"
                         kind == QuickShiftKind.GIORNALIERO -> "Base $amount"
                         else -> amount

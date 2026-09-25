@@ -144,9 +144,9 @@ internal fun resolveQuickShift(
     val prefix = if (overrideClass != null) "Calendario speciale: " else ""
     val explanation = if (kind == QuickShiftKind.GIORNALIERO) {
         if (performanceType == PerformanceType.DOPPIO) {
-            "Mezzo Giornaliero: base fissa €45, senza Mezza IMA e senza Polivalenza."
+            "Mezzo Giornaliero: base pari a metà del Giornaliero configurato, senza Mezza IMA e senza Polivalenza."
         } else {
-            "Giornaliero: base fissa €90; con ONMezzo la base diventa €45."
+            "Giornaliero: usa la base configurata; con ONMezzo la base viene dimezzata."
         }
     } else prefix + when (effectiveClass) {
         PortDayClass.FERIALE -> "giorno feriale, viene selezionato automaticamente $compactCode."

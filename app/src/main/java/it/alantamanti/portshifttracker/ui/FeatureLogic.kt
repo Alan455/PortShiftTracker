@@ -61,9 +61,15 @@ private val primaryAbsenceCodes = setOf(
     "AVV_CONGEDO"
 )
 
+/** Use the label frozen with the paid allowance when it exists. */
+internal fun historicalAllowanceName(
+    row: ShiftWithPay,
+    rule: AllowanceRuleEntity
+): String = row.pay.allowanceLines.firstOrNull { it.ruleId == rule.id }?.name ?: rule.name
+
 internal fun displayShiftLabel(row: ShiftWithPay): String {
     val absence = row.selectedRules.firstOrNull { it.code in primaryAbsenceCodes }
-    if (absence != null) return absence.name
+    if (absence != null) return historicalAllowanceName(row, absence)
 
     val codes = row.selectedRules.map { it.code }.toSet()
     if ("G" in codes && "DOP_ON_MEZZO" in codes) return "Mezzo Giornaliero"
@@ -76,10 +82,14 @@ internal fun displayShiftExtras(row: ShiftWithPay): List<String> {
     val absence = row.selectedRules.firstOrNull { it.code in primaryAbsenceCodes }
     if (absence != null) return emptyList()
 
-    val mainName = mainAllowanceName(row)
+    val mainRuleId = row.selectedRules.firstOrNull {
+        it.category == AllowanceCategory.TURNO ||
+            it.category == AllowanceCategory.DOPPIO ||
+            it.category == AllowanceCategory.MEZZO_TURNO
+    }?.id
     return row.selectedRules
-        .filterNot { it.name == mainName }
-        .map { it.name }
+        .filterNot { it.id == mainRuleId }
+        .map { historicalAllowanceName(row, it) }
         .distinct()
 }
 

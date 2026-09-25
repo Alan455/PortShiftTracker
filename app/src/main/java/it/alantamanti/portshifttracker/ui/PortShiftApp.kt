@@ -497,7 +497,7 @@ internal fun ShiftCompactCard(
     val secondaryRules = row.selectedRules
         .filterNot { it.id == turnRule?.id }
         .take(4)
-        .joinToString(" · ") { it.name }
+        .joinToString(" · ") { historicalAllowanceName(row, it) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -518,7 +518,7 @@ internal fun ShiftCompactCard(
                 Text(
                     buildString {
                         append(performanceLabel(row.shift.performanceType))
-                        turnRule?.let { append(" • ${it.name}") }
+                        turnRule?.let { append(" • ${historicalAllowanceName(row, it)}") }
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
@@ -1127,7 +1127,15 @@ internal fun RuleEditorDialog(
 ) {
     var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
     var code by remember(initial) { mutableStateOf(initial?.code ?: "CUSTOM_${System.currentTimeMillis()}") }
-    var type by remember(initial) { mutableStateOf(initial?.calculationType ?: AllowanceCalculationType.FIXED_PER_SHIFT) }
+    val structuralFixedCodes = setOf("G", "DOP_G", "DOP_ON_MEZZO", "DOP_TU_MEZZO")
+    val structuralFixed = initial?.code in structuralFixedCodes
+    var type by remember(initial) {
+        mutableStateOf(
+            if (structuralFixed || initial?.calculationType == AllowanceCalculationType.PER_HOUR) {
+                AllowanceCalculationType.FIXED_PER_SHIFT
+            } else initial?.calculationType ?: AllowanceCalculationType.FIXED_PER_SHIFT
+        )
+    }
     var category by remember(initial) { mutableStateOf(initial?.category ?: AllowanceCategory.ALTRE_VOCI) }
     var applicationMode by remember(initial) { mutableStateOf(initial?.applicationMode ?: AllowanceApplicationMode.MANUAL) }
     var performanceMask by remember(initial) {
@@ -1180,12 +1188,32 @@ internal fun RuleEditorDialog(
                         }
                     }
                 }
+                item {
+                    Text(
+                        "Una modifica della tariffa si applica soltanto alle prestazioni salvate successivamente. Gli importi storici restano invariati.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 item { Text("Tipo di calcolo", fontWeight = FontWeight.SemiBold) }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AllowanceCalculationType.entries.forEach { calculation ->
-                            FilterChip(selected = type == calculation, onClick = { type = calculation }, label = { Text(typeLabel(calculation)) })
+                        AllowanceCalculationType.entries.filterNot { it == AllowanceCalculationType.PER_HOUR }.forEach { calculation ->
+                            FilterChip(
+                                selected = type == calculation,
+                                enabled = !structuralFixed,
+                                onClick = { type = calculation },
+                                label = { Text(typeLabel(calculation)) }
+                            )
                         }
+                    }
+                }
+                if (initial?.code in setOf("DOP_G", "DOP_ON_MEZZO")) {
+                    item {
+                        Text(
+                            "Importo derivato: modifica la tariffa Giornaliero per aggiornare automaticamente questo valore.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
                 item {
@@ -1193,6 +1221,7 @@ internal fun RuleEditorDialog(
                         value = valueText,
                         onValueChange = { valueText = it },
                         label = { Text(if (type == AllowanceCalculationType.PERCENT_BASE) "Percentuale" else "Importo €") },
+                        enabled = initial?.code !in setOf("DOP_G", "DOP_ON_MEZZO"),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1489,9 +1518,12 @@ internal fun ruleDescription(rule: AllowanceRuleEntity): String {
 internal fun ruleValueLabel(rule: AllowanceRuleEntity, performanceType: PerformanceType): String {
     if (rule.calculationType == AllowanceCalculationType.PERCENT_BASE) return "${rule.value / 100.0}%"
     if (rule.calculationType == AllowanceCalculationType.PER_HOUR) return "${money(rule.value)}/h"
-    val cents = if (performanceType == PerformanceType.MEZZO_DOPPIO && rule.category == AllowanceCategory.DOPPIO) {
-        (rule.value / 2.0).roundToLong()
-    } else rule.value
+    val cents = when {
+        rule.code == "DOP_ON_MEZZO" -> rule.value // synchronized with half of configurable Giornaliero
+        performanceType == PerformanceType.MEZZO_DOPPIO &&
+            rule.category == AllowanceCategory.DOPPIO -> (rule.value / 2.0).roundToLong()
+        else -> rule.value
+    }
     return money(cents)
 }
 
@@ -1499,7 +1531,7 @@ internal fun mainAllowanceName(row: ShiftWithPay): String? = row.selectedRules.f
     it.category == AllowanceCategory.TURNO ||
         it.category == AllowanceCategory.DOPPIO ||
         it.category == AllowanceCategory.MEZZO_TURNO
-}?.name
+}?.let { historicalAllowanceName(row, it) }
 
 internal fun rowDate(row: ShiftWithPay): LocalDate = rowStart(row).toLocalDate()
 

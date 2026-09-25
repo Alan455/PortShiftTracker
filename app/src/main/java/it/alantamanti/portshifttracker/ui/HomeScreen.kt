@@ -340,6 +340,7 @@ internal fun HomeScreen(repository: PortRepository) {
             initialDate = rowDate(row),
             initialShift = row.shift,
             initialSelectedIds = row.selectedRules.map { it.id }.toSet(),
+            initialPay = row.pay,
             historyRows = historyRows,
             specialDays = specialDays,
             onDismiss = { editingRow = null },
@@ -349,6 +350,11 @@ internal fun HomeScreen(repository: PortRepository) {
                         repository.updateShiftWithSelections(shift, selectedIds)
                     }
                     Unit
+                }
+            },
+            onSaveNotes = { newNotes ->
+                runCatching {
+                    repository.updateShiftNotes(row.shift.id, newNotes)
                 }
             }
         )

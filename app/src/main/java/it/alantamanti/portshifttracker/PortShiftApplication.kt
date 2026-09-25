@@ -22,7 +22,7 @@ class PortShiftApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val db = Room.databaseBuilder(this, AppDatabase::class.java, "port_shift.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
         repository = PortRepository(db)
 
@@ -48,6 +48,35 @@ class PortShiftApplication : Application() {
 
         // Aggiunge soltanto le voci mancanti. Le modifiche dell'utente restano intatte.
         DefaultCatalog.rules().forEach { db.allowanceRuleDao().insertIfMissing(it) }
+
+        // Corregge SOLO le regole legacy, senza reimpostare le tariffe a ogni
+        // successivo avvio: un'eventuale personalizzazione futura resta salva.
+        // Le tre assenze concordate sostituiscono l'intera prestazione.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET basePayEffect = 'REPLACE_BASE', " +
+                "exclusiveGroup = 'SOSTITUISCE_BASE', calculationType = 'FIXED_PER_SHIFT', " +
+                "value = CASE code WHEN 'AVV_CONGEDO' THEN 3000 " +
+                "WHEN 'AVV_DS' THEN 9500 WHEN 'AVV_INAIL' THEN 6780 END, " +
+                "performanceMask = 1 WHERE code IN ('AVV_CONGEDO','AVV_DS','AVV_INAIL') " +
+                "AND basePayEffect != 'REPLACE_BASE'"
+        )
+        // Il vecchio FuoriOrario/h orario diventa €7,75 una sola volta per
+        // selezione; la regola già convertita non viene più sovrascritta.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET calculationType = 'FIXED_PER_SHIFT', " +
+                "value = 775, name = 'FuoriOrario', windowStartMinute = NULL, " +
+                "windowEndMinute = NULL WHERE code = 'AVV_FUORI_ORARIO_H' " +
+                "AND calculationType != 'FIXED_PER_SHIFT'"
+        )
+
+        // Tutte le vecchie voci orarie, incluse le personalizzate, diventano
+        // importi fissi per selezione. Il valore numerico della tariffa resta
+        // invariato; il predicato converte ciascuna regola soltanto una volta.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET calculationType = 'FIXED_PER_SHIFT', " +
+                "windowStartMinute = NULL, windowEndMinute = NULL, minimumShiftMinutes = 0 " +
+                "WHERE calculationType = 'PER_HOUR'"
+        )
 
         // Riallinea il catalogo voci sui database già esistenti.
         // Donazione sangue, Inail e Congedo non sono Avviamenti.
@@ -108,19 +137,27 @@ class PortShiftApplication : Application() {
                 "WHERE code IN ('DOP_TU_MEZZO','DOP_ON_MEZZO')"
         )
 
-        // Giornaliero: base fissa €90 sul primo turno. Con ONMezzo il motore usa il 50%.
-        // Nel Doppio la voce DOP_G rappresenta invece il solo Mezzo Giornaliero da €45.
+        // Structural rule corrections must never overwrite user rates.
+        // Giornaliero can now be changed from the tariff editor.
         db.openHelper.writableDatabase.execSQL(
-            "UPDATE allowance_rules SET name = 'Giornaliero', value = 9000, " +
+            "UPDATE allowance_rules SET name = 'Giornaliero', " +
                 "category = 'TURNO', exclusiveGroup = 'TIPO_TURNO', " +
-                "basePayEffect = 'REPLACE_BASE', performanceMask = 1, enabled = 1 " +
+                "basePayEffect = 'REPLACE_BASE', performanceMask = 1 " +
                 "WHERE code = 'G'"
         )
         db.openHelper.writableDatabase.execSQL(
-            "UPDATE allowance_rules SET name = 'Mezzo Giornaliero', value = 4500, " +
+            "UPDATE allowance_rules SET name = 'Mezzo Giornaliero', " +
                 "category = 'DOPPIO', exclusiveGroup = 'DOPPIO', " +
-                "basePayEffect = 'REPLACE_BASE', performanceMask = 2, enabled = 1 " +
+                "basePayEffect = 'REPLACE_BASE', performanceMask = 2 " +
                 "WHERE code = 'DOP_G'"
+        )
+        // Derived amounts are linked to the configurable Giornaliero, never
+        // to hardcoded 90/45 euro constants.
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE allowance_rules SET value = " +
+                "(SELECT (value + 1) / 2 FROM allowance_rules WHERE code = 'G') " +
+                "WHERE code IN ('DOP_G','DOP_ON_MEZZO') " +
+                "AND EXISTS(SELECT 1 FROM allowance_rules WHERE code = 'G')"
         )
 
         // Converte la vecchia voce Giornaliero da €87 nel nuovo Giornaliero strutturale da €90.
@@ -153,9 +190,34 @@ class PortShiftApplication : Application() {
                 db.shiftDao().update(shift.copy(serviceEpochDay = date.toEpochDay()))
             }
         }
+        // Backfill only AFTER known economic bug corrections and legacy rule
+        // normalization. Running again must never replace a frozen snapshot.
+        repository.backfillMissingPaySnapshots()
     }
 
     companion object {
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS shift_pay_snapshots (
+                        shiftId INTEGER NOT NULL PRIMARY KEY,
+                        totalMinutes INTEGER NOT NULL,
+                        basePayCents INTEGER NOT NULL,
+                        allowanceLinesJson TEXT NOT NULL,
+                        savedAtEpochMillis INTEGER NOT NULL,
+                        FOREIGN KEY(shiftId) REFERENCES shifts(id)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_shift_pay_snapshots_shiftId " +
+                        "ON shift_pay_snapshots(shiftId)"
+                )
+            }
+        }
+
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE workers ADD COLUMN basePayMode TEXT NOT NULL DEFAULT 'HOURLY'")

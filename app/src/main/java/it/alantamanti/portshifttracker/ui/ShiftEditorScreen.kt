@@ -82,6 +82,7 @@ import it.alantamanti.portshifttracker.data.repository.DuplicatePerformanceExcep
 import it.alantamanti.portshifttracker.data.repository.PortRepository
 import it.alantamanti.portshifttracker.data.repository.normalizeSelectedRuleIds
 import it.alantamanti.portshifttracker.data.repository.selectionValidationMessage
+import it.alantamanti.portshifttracker.data.repository.isStandaloneCongedoSelection
 import it.alantamanti.portshifttracker.data.repository.ShiftWithPay
 import it.alantamanti.portshifttracker.data.repository.toDomain
 import it.alantamanti.portshifttracker.domain.AllowanceApplicationMode
@@ -90,6 +91,7 @@ import it.alantamanti.portshifttracker.domain.AllowanceCalculator
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.BasePayMode
 import it.alantamanti.portshifttracker.domain.PerformanceType
+import it.alantamanti.portshifttracker.domain.PayBreakdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -122,7 +124,9 @@ internal fun ShiftEditorScreen(
     historyRows: List<ShiftWithPay>,
     specialDays: List<SpecialDayOverride>,
     onDismiss: () -> Unit,
-    onSave: suspend (List<ShiftEntity>, Set<Long>) -> Result<Unit>
+    onSave: suspend (List<ShiftEntity>, Set<Long>) -> Result<Unit>,
+    initialPay: PayBreakdown? = null,
+    onSaveNotes: (suspend (String) -> Result<Unit>)? = null
 ) {
     val context = LocalContext.current
     val initialZone = ZoneId.of(initialShift?.zoneId ?: "Europe/Rome")
@@ -195,12 +199,50 @@ internal fun ShiftEditorScreen(
             it.applicationMode == AllowanceApplicationMode.MANUAL &&
             (it.performanceMask and performanceType.maskBit) != 0
     }
-    val normalizedSelectedIds = normalizeSelectedRuleIds(performanceType, selectedIds, rules)
+    // Preserve the first-turn Congedo selection before normalizing worked-turn rules.
+    val normalizedSelectedIds =
+        if (guidedEntry == GuidedEntryKind.ABS_CONGEDO &&
+            isStandaloneCongedoSelection(performanceType, selectedIds, rules)
+        ) selectedIds
+        else normalizeSelectedRuleIds(performanceType, selectedIds, rules)
+    val initialNormalizedIds = if (initialShift != null &&
+        isStandaloneCongedoSelection(initialShift.performanceType, initialSelectedIds, rules)
+    ) initialSelectedIds
+    else normalizeSelectedRuleIds(
+        initialShift?.performanceType ?: PerformanceType.TURNO,
+        initialSelectedIds,
+        rules
+    )
+    // Avoid recalculating the preview and overwriting a frozen snapshot when
+    // only the note changes. Compare text before timestamps lose seconds.
+    val notesOnlyEdit = onSaveNotes != null && isNotesOnlyEdit(
+        original = initialShift,
+        isCopy = isCopy,
+        originalStartText = initialStart.format(editFormatter),
+        originalEndText = initialEnd.format(editFormatter),
+        startText = startText,
+        endText = endText,
+        role = role,
+        performanceType = performanceType,
+        initialNormalizedIds = initialNormalizedIds,
+        selectedNormalizedIds = normalizedSelectedIds
+    )
     LaunchedEffect(normalizedSelectedIds) {
         if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
     }
     val selectedRules = manualRules.filter { it.id in normalizedSelectedIds }
-    val saveValidationMessage = selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
+    val isFestivo = (specialOverrideClass ?: portDayClass(editorDate)) == PortDayClass.FESTIVO
+    val festiveDisdettaSelected = selectedRules.any { isFestiveDisdettaRule(it) }
+    val saveValidationMessage =
+        if (notesOnlyEdit) null // Existing pay and selections are not edited.
+        else if (festiveDisdettaSelected && !isFestivo) {
+            "Disdetta casa festiva è disponibile soltanto nei giorni festivi."
+        } else if (
+            guidedEntry == GuidedEntryKind.ABS_CONGEDO &&
+            isStandaloneCongedoSelection(performanceType, normalizedSelectedIds, rules)
+        ) {
+            null // Congedo is a complete absence; no worked-turn choice is required.
+        } else selectionValidationMessage(performanceType, normalizedSelectedIds, rules)
     val usageScores = remember(historyRows, role, performanceType, editorDate) {
         ruleUsageScores(historyRows, editorDate, performanceType, role)
     }
@@ -212,7 +254,8 @@ internal fun ShiftEditorScreen(
         else -> true
     }
     val hasVisibleManualAllowances = manualRules.any { rule ->
-        guidedEntry == null || guidedRuleVisible(guidedEntry, rule)
+        (guidedEntry == null || guidedRuleVisible(guidedEntry, rule)) &&
+            (isFestivo || !isFestiveDisdettaRule(rule))
     }
     val recentRoleOptions = remember(historyRows, editorDate) { recentRoles(historyRows, editorDate) }
     val repeatCandidate = remember(historyRows, editorDate, initialShift?.id) {
@@ -233,6 +276,7 @@ internal fun ShiftEditorScreen(
     }
     val suggestedCompanions = manualRules.filter { rule ->
         (guidedEntry == null || guidedRuleVisible(guidedEntry, rule)) &&
+            (isFestivo || !isFestiveDisdettaRule(rule)) &&
             rule.id !in normalizedSelectedIds &&
             parseTags(rule.recommendedWithAnyTagCsv).any { it in selectedTags }
     }
@@ -249,7 +293,7 @@ internal fun ShiftEditorScreen(
             performanceType = performanceType
         )
     }
-    val preview = runCatching {
+    val preview = if (notesOnlyEdit && initialPay != null) initialPay else runCatching {
         draftShift?.let {
             calculator.calculate(worker.toDomain(), it.toDomain(), rules.map { rule -> rule.toDomain() }, normalizedSelectedIds)
         }
@@ -322,7 +366,9 @@ internal fun ShiftEditorScreen(
                             }
                             Button(
                                 onClick = {
-                                    val shift = parseShiftOrNull(
+                                    val shift = if (notesOnlyEdit && initialShift != null) {
+                                        initialShift.copy(notes = notes)
+                                    } else parseShiftOrNull(
                                         id = initialShift?.id ?: 0,
                                         workerId = worker.id,
                                         startText = startText,
@@ -347,7 +393,11 @@ internal fun ShiftEditorScreen(
                                             }
                                             saving = true
                                             scope.launch {
-                                                val result = onSave(shiftsToSave, normalizedSelectedIds)
+                                                val result = if (notesOnlyEdit && onSaveNotes != null) {
+                                                    onSaveNotes(notes)
+                                                } else {
+                                                    onSave(shiftsToSave, normalizedSelectedIds)
+                                                }
                                                 saving = false
                                                 result.onSuccess { saved = true }
                                                     .onFailure { failure ->
@@ -554,10 +604,10 @@ internal fun ShiftEditorScreen(
                             InfoPanel(
                                 when {
                                     isGiornaliero ->
-                                        "Base fissa € 90,00. Polivalenza automatica. Con ONMezzo la base diventa € 45,00 e viene aggiunta automaticamente Mezza IMA."
+                                        "Base Giornaliero configurabile. Polivalenza automatica. Con ONMezzo la base si dimezza e viene aggiunta automaticamente Mezza IMA."
                                     performanceType == PerformanceType.DOPPIO &&
                                         quickKind == QuickShiftKind.GIORNALIERO ->
-                                        "Mezzo Giornaliero: base fissa € 45,00. Non riceve Mezza IMA né Polivalenza; Area, Disagi, Avviamento e Altre Voci restano disponibili."
+                                        "Mezzo Giornaliero: base pari a metà del Giornaliero configurato. Non riceve Mezza IMA né Polivalenza; Area, Disagi, Avviamento e Altre Voci restano disponibili."
                                     else -> performanceInfo(worker, performanceType)
                                 }
                             )
@@ -669,7 +719,7 @@ internal fun ShiftEditorScreen(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        "Totale provvisorio",
+                                        if (notesOnlyEdit) "Totale storico" else "Totale provvisorio",
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                     PreviewBreakdownRow(
@@ -919,6 +969,7 @@ internal fun ShiftEditorScreen(
                         val categoryRules = manualRules
                             .filter { it.category == category }
                             .filter { rule -> guidedEntry == null || guidedRuleVisible(guidedEntry, rule) }
+                            .filter { rule -> !isFestiveDisdettaRule(rule) || isFestivo }
                             .filterNot { rule ->
                                 isGiornaliero &&
                                     category == AllowanceCategory.MEZZO_TURNO &&
@@ -1141,14 +1192,14 @@ private fun GuidedExpandableRow(
 private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
     val (code, title, subtitle) = when (entry) {
         GuidedEntryKind.FIRST_TURNO -> Triple("T", "Turno", "Scegli M, P, S, S2 o N")
-        GuidedEntryKind.FIRST_GIORNALIERO -> Triple("G", "Giornaliero", "Base € 90,00 · ONMezzo disponibile")
+        GuidedEntryKind.FIRST_GIORNALIERO -> Triple("G", "Giornaliero", "Base configurabile · ONMezzo disponibile")
         GuidedEntryKind.ABS_FERIE -> Triple("Ff", "Ferie", "Assenza")
         GuidedEntryKind.ABS_MALATTIA -> Triple("Mm", "Malattia", "Assenza")
         GuidedEntryKind.ABS_CONGEDO -> Triple("PC", "Congedo", "Assenza")
         GuidedEntryKind.ABS_IMA -> Triple("I", "IMA", "Puoi scegliere Disdetta casa o festiva")
         GuidedEntryKind.SECOND_DOPPIO -> Triple("2×", "Doppio completo", "Base e indennità turno intere")
-        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · Pom/Sera/S2/Notte al 50%")
-        GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "Mezzo Giornaliero", "Base € 45,00 · nessuna Mezza IMA")
+        GuidedEntryKind.SECOND_MEZZO_DOPPIO -> Triple("½×", "Mezzo Doppio", "Base metà · tutte le indennità turno al 50%")
+        GuidedEntryKind.SECOND_MEZZO_GIORNALIERO -> Triple("½G", "ONMezzo · secondo Giornaliero", "Base metà Giornaliero · nessuna Mezza IMA")
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1182,6 +1233,11 @@ private fun GuidedEntrySummaryCard(entry: GuidedEntryKind) {
         }
     }
 }
+
+// Include legacy/custom display-name duplicates, not only the catalog code.
+internal fun isFestiveDisdettaRule(rule: AllowanceRuleEntity): Boolean =
+    rule.code.trim().equals("AVV_DIS_CASA_FEST", ignoreCase = true) ||
+        rule.name.trim().equals("Disdetta casa festiva", ignoreCase = true)
 
 private val guidedAbsenceRuleCodes = setOf(
     "ALT_FERIE", "ALT_MALATTIA", "ALT_IMA", "AVV_DS", "AVV_INAIL", "AVV_CONGEDO"
