@@ -109,7 +109,7 @@ internal fun summaryCategoryDetails(
                         (category == AllowanceCategory.TURNO &&
                             rulesById[line.ruleId]?.category == AllowanceCategory.MEZZO_TURNO))
             }
-            .groupBy { line -> line.ruleId to (rulesById[line.ruleId]?.name ?: line.name) }
+            .groupBy { line -> line.ruleId to line.name }
             .map { (identity, lines) ->
                 Triple(identity.second, lines.sumOf { it.amountCents }, lines.count { it.amountCents != 0L })
             }
@@ -143,7 +143,7 @@ internal fun summaryCategoryDetails(
                 else -> false
             }
         }
-        .groupBy { it.ruleId to (rulesById[it.ruleId]?.name ?: it.name) }
+        .groupBy { it.ruleId to it.name }
         .map { (identity, lines) ->
             Triple(
                 identity,
