@@ -73,6 +73,30 @@ class FrozenPaySnapshotTest {
         assertEquals(before, repository.shiftRows.first().single().pay)
     }
 
+    @Test fun notesOnlyUpdatePreservesStoredTimeSelectionsAndHistoricalPay() = runBlocking {
+        val rules = db.allowanceRuleDao().getAll()
+        val mattina = rules.single { it.code == "MAT" }
+        val q2 = rules.single { it.code == "AREA_Q2" }
+        val start = LocalDate.of(2026, 9, 17).atTime(6, 30)
+            .atZone(ZoneId.of("Europe/Rome")).toInstant().toEpochMilli() + 12_345L
+        val id = repository.addShiftWithSelections(
+            ShiftEntity(workerId = 1, startEpochMillis = start, endEpochMillis = start + 6L * 3600_000L),
+            setOf(mattina.id, q2.id)
+        )
+        val originalShift = db.shiftDao().getAll().single()
+        val originalSelections = db.shiftAllowanceSelectionDao().getAll()
+        val originalSnapshot = db.shiftPaySnapshotDao().findByShiftId(id)!!
+        repository.saveRule(q2.copy(value = 1200L))
+        repository.updateShiftNotes(id, "Nota aggiornata dopo la modifica di Q2")
+        assertEquals(
+            originalShift.copy(notes = "Nota aggiornata dopo la modifica di Q2"),
+            db.shiftDao().getAll().single()
+        )
+        assertEquals(originalSelections, db.shiftAllowanceSelectionDao().getAll())
+        assertEquals(originalSnapshot, db.shiftPaySnapshotDao().findByShiftId(id))
+        assertEquals(originalSnapshot.toBreakdown(), repository.shiftRows.first().single().pay)
+    }
+
     @Test fun legacyShiftIsFrozenBeforeAnOrdinaryTariffEdit() = runBlocking {
         val rules = db.allowanceRuleDao().getAll()
         val mattina = rules.single { it.code == "MAT" }
