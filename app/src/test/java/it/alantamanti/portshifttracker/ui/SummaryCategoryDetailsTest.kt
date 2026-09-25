@@ -154,6 +154,50 @@ class SummaryCategoryDetailsTest {
     }
 
     @Test
+    fun renamingCustomAllowanceKeepsBothHistoricalNamesAndAmountsInMonthlySummary() {
+        val renamed = rule(90, "CUSTOM_BONUS", "Bonus nuovo", AllowanceCategory.ALTRE_VOCI)
+        val oldRow = row(
+            base = 0,
+            lines = listOf(AllowanceLine(90, "Bonus vecchio", 60, 1_250)),
+            selected = listOf(renamed)
+        )
+        val newRow = row(
+            base = 0,
+            lines = listOf(AllowanceLine(90, "Bonus nuovo", 60, 1_500)),
+            selected = listOf(renamed)
+        )
+
+        val categories = summaryCategoryDetails(listOf(oldRow, newRow), listOf(renamed))
+        assertEquals(1_250L, categories.single { it.label == "Bonus vecchio" }.cents)
+        assertEquals(1_500L, categories.single { it.label == "Bonus nuovo" }.cents)
+        assertEquals(2_750L, categories.sumOf { it.cents })
+        assertEquals("Bonus vecchio", historicalAllowanceName(oldRow, renamed))
+        assertEquals(listOf("Bonus vecchio"), displayShiftExtras(oldRow))
+        assertEquals("Bonus nuovo", historicalAllowanceName(newRow, renamed))
+    }
+
+    @Test
+    fun historicalAreaAndTurnLabelsUseSnapshotNamesRatherThanCurrentCatalogNames() {
+        val turn = rule(91, "MAT", "Turno rinominato", AllowanceCategory.TURNO)
+        val area = rule(92, "CUSTOM_AREA", "Area nuova", AllowanceCategory.AREA)
+        val saved = row(
+            base = 6_780,
+            lines = listOf(
+                AllowanceLine(91, "Turno originario", 60, 200),
+                AllowanceLine(92, "Area originaria", 60, 900)
+            ),
+            selected = listOf(turn, area)
+        )
+
+        assertEquals("Turno originario", mainAllowanceName(saved))
+        assertEquals(listOf("Area originaria"), displayShiftExtras(saved))
+        val detail = summaryCategoryDetails(listOf(saved), listOf(turn, area))
+        assertEquals("Turno originario", detail.single { it.id == "turno" }.components.single().label)
+        assertEquals("Area originaria", detail.single { it.id == "area" }.components.single().label)
+        assertEquals(saved.pay.totalPayCents, detail.sumOf { it.cents })
+    }
+
+    @Test
     fun categoriesAndPopupComponentsAreSortedByDescendingAmount() {
         val q2 = rule(30, "Q2", "Q2", AllowanceCategory.AREA)
         val h = rule(31, "H", "H", AllowanceCategory.AREA)
