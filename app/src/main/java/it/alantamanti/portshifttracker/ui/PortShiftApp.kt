@@ -497,7 +497,7 @@ internal fun ShiftCompactCard(
     val secondaryRules = row.selectedRules
         .filterNot { it.id == turnRule?.id }
         .take(4)
-        .joinToString(" · ") { it.name }
+        .joinToString(" · ") { historicalAllowanceName(row, it) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -518,7 +518,7 @@ internal fun ShiftCompactCard(
                 Text(
                     buildString {
                         append(performanceLabel(row.shift.performanceType))
-                        turnRule?.let { append(" • ${it.name}") }
+                        turnRule?.let { append(" • ${historicalAllowanceName(row, it)}") }
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
@@ -1531,7 +1531,7 @@ internal fun mainAllowanceName(row: ShiftWithPay): String? = row.selectedRules.f
     it.category == AllowanceCategory.TURNO ||
         it.category == AllowanceCategory.DOPPIO ||
         it.category == AllowanceCategory.MEZZO_TURNO
-}?.name
+}?.let { historicalAllowanceName(row, it) }
 
 internal fun rowDate(row: ShiftWithPay): LocalDate = rowStart(row).toLocalDate()
 
