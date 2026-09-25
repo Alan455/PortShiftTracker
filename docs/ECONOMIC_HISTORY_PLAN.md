@@ -1,6 +1,6 @@
 # Shift — storico economico e tariffe personalizzabili
 
-Stato: **implementazione sul branch feature/summary-category-breakdown-sheet; build e test sul dispositivo ancora da eseguire**. `main` non è stato modificato. Non distribuire ai tester prima dei test con backup e migrazione reale.
+Stato: **implementazione sul branch feature/summary-category-breakdown-sheet**. La suite JVM e i test strumentali su Pixel 9 (Android 17) sono stati superati prima delle ultime correzioni alle etichette storiche; i nuovi test per la rinomina devono ancora essere eseguiti. `main` non è stato modificato. Non distribuire ai tester prima della verifica con backup e migrazione reale.
 
 ## Regole
 
@@ -26,5 +26,5 @@ Stato: **implementazione sul branch feature/summary-category-breakdown-sheet; bu
 - Testare **su copia del database** una migrazione reale dalla versione 7 alla 8, comparando prestazioni, categorie, importi e totale mensile prima/dopo; verificare riapertura e idempotenza del backfill.
 - Verificare il ripristino di un backup JSON v1 e v2, il funzionamento di eliminazione/annulla, e la modifica di una tariffa con turni storici.
 - Le operazioni correttive retroattive future richiedono una formula specifica per la regola errata e un backup prima di ogni correzione; non c'è ancora un'interfaccia utente per attivarle né un audit trail persistente delle versioni pre-correzione.
-- La descrizione e categoria storica delle regole vengono ancora correlate al catalogo corrente in alcune viste: il valore monetario della prestazione è congelato, ma un cambio del nome/categoria o l'eliminazione di una voce può modificare il raggruppamento visivo del suo dettaglio.
+- Le denominazioni delle **righe di indennità presenti negli snapshot** sono usate nel riepilogo mensile, nella ricerca dello storico e nelle etichette delle prestazioni; i test di regressione coprono rinomina e backup/ripristino. Restano collegate al catalogo corrente la categoria e le etichette delle selezioni prive di una riga economica nello snapshot (ad esempio alcune sostituzioni della base): una modifica di categoria o la cancellazione di una regola usata nello storico può ancora alterare il raggruppamento visivo.
 - NON aggiungere una disinstallazione come passo di migrazione: cancellerebbe i dati locali che si intende conservare.
