@@ -234,7 +234,8 @@ internal fun ShiftEditorScreen(
     val isFestivo = (specialOverrideClass ?: portDayClass(editorDate)) == PortDayClass.FESTIVO
     val festiveDisdettaSelected = selectedRules.any { isFestiveDisdettaRule(it) }
     val saveValidationMessage =
-        if (festiveDisdettaSelected && !isFestivo) {
+        if (notesOnlyEdit) null // Existing pay and selections are not edited.
+        else if (festiveDisdettaSelected && !isFestivo) {
             "Disdetta casa festiva è disponibile soltanto nei giorni festivi."
         } else if (
             guidedEntry == GuidedEntryKind.ABS_CONGEDO &&
@@ -365,7 +366,9 @@ internal fun ShiftEditorScreen(
                             }
                             Button(
                                 onClick = {
-                                    val shift = parseShiftOrNull(
+                                    val shift = if (notesOnlyEdit && initialShift != null) {
+                                        initialShift.copy(notes = notes)
+                                    } else parseShiftOrNull(
                                         id = initialShift?.id ?: 0,
                                         workerId = worker.id,
                                         startText = startText,
