@@ -73,6 +73,44 @@ class FrozenPaySnapshotTest {
         assertEquals(before, repository.shiftRows.first().single().pay)
     }
 
+    @Test fun renamingAllowancePreservesOldNameAndAmountIncludingBackupRestore() = runBlocking {
+        val rules = db.allowanceRuleDao().getAll()
+        val mattina = rules.single { it.code == "MAT" }
+        val q2 = rules.single { it.code == "AREA_Q2" }
+        val date = LocalDate.of(2026, 9, 17)
+        val start = date.atTime(6, 30).atZone(ZoneId.of("Europe/Rome")).toInstant().toEpochMilli()
+        val previousId = repository.addShiftWithSelections(
+            ShiftEntity(workerId = 1, startEpochMillis = start, endEpochMillis = start + 6L * 3600_000L),
+            setOf(mattina.id, q2.id)
+        )
+        val before = repository.shiftRows.first().single().pay
+        val oldLine = before.allowanceLines.single { it.ruleId == q2.id }
+
+        repository.saveRule(q2.copy(name = "Q2 rinominata", value = 1_200L))
+        val oldRow = repository.shiftRows.first().single()
+        assertEquals(before, oldRow.pay)
+        assertEquals("Q2", oldRow.pay.allowanceLines.single { it.ruleId == q2.id }.name)
+        assertEquals(932L, oldLine.amountCents)
+        assertEquals("Q2 rinominata", oldRow.selectedRules.single { it.id == q2.id }.name)
+
+        val laterId = repository.addShiftWithSelections(
+            ShiftEntity(workerId = 1, startEpochMillis = start + 24L * 3600_000L,
+                endEpochMillis = start + 30L * 3600_000L),
+            setOf(mattina.id, q2.id)
+        )
+        val rows = repository.shiftRows.first().associateBy { it.shift.id }
+        val newLine = rows.getValue(laterId).pay.allowanceLines.single { it.ruleId == q2.id }
+        assertEquals("Q2 rinominata", newLine.name)
+        assertEquals(1_200L, newLine.amountCents)
+        assertEquals(before, rows.getValue(previousId).pay)
+
+        repository.restoreSnapshot(BackupCodec.decode(BackupCodec.encode(repository.exportSnapshot(), "{}")).database)
+        val restored = repository.shiftRows.first().associateBy { it.shift.id }
+        assertEquals(before, restored.getValue(previousId).pay)
+        assertEquals("Q2 rinominata",
+            restored.getValue(laterId).pay.allowanceLines.single { it.ruleId == q2.id }.name)
+    }
+
     @Test fun notesOnlyUpdatePreservesStoredTimeSelectionsAndHistoricalPay() = runBlocking {
         val rules = db.allowanceRuleDao().getAll()
         val mattina = rules.single { it.code == "MAT" }
