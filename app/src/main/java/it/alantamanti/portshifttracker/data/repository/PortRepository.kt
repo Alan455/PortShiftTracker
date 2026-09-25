@@ -104,6 +104,16 @@ class PortRepository(
         workerDao.upsert(worker)
     }
 
+    /**
+     * Notes are metadata. Never normalize selections, parse displayed times,
+     * or calculate today's prices when only the note has changed.
+     */
+    suspend fun updateShiftNotes(shiftId: Long, notes: String) = db.withTransaction {
+        require(shiftDao.updateNotes(shiftId, notes) == 1) {
+            "La prestazione da modificare non esiste più."
+        }
+    }
+
     suspend fun addShiftWithSelections(shift: ShiftEntity, selectedRuleIds: Set<Long>): Long =
         addShiftsWithSelections(listOf(shift), selectedRuleIds).single()
 
