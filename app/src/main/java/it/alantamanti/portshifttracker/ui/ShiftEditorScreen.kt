@@ -91,6 +91,7 @@ import it.alantamanti.portshifttracker.domain.AllowanceCalculator
 import it.alantamanti.portshifttracker.domain.AllowanceCategory
 import it.alantamanti.portshifttracker.domain.BasePayMode
 import it.alantamanti.portshifttracker.domain.PerformanceType
+import it.alantamanti.portshifttracker.domain.PayBreakdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -123,7 +124,9 @@ internal fun ShiftEditorScreen(
     historyRows: List<ShiftWithPay>,
     specialDays: List<SpecialDayOverride>,
     onDismiss: () -> Unit,
-    onSave: suspend (List<ShiftEntity>, Set<Long>) -> Result<Unit>
+    onSave: suspend (List<ShiftEntity>, Set<Long>) -> Result<Unit>,
+    initialPay: PayBreakdown? = null,
+    onSaveNotes: (suspend (String) -> Result<Unit>)? = null
 ) {
     val context = LocalContext.current
     val initialZone = ZoneId.of(initialShift?.zoneId ?: "Europe/Rome")
@@ -202,6 +205,28 @@ internal fun ShiftEditorScreen(
             isStandaloneCongedoSelection(performanceType, selectedIds, rules)
         ) selectedIds
         else normalizeSelectedRuleIds(performanceType, selectedIds, rules)
+    val initialNormalizedIds = if (initialShift != null &&
+        isStandaloneCongedoSelection(initialShift.performanceType, initialSelectedIds, rules)
+    ) initialSelectedIds
+    else normalizeSelectedRuleIds(
+        initialShift?.performanceType ?: PerformanceType.TURNO,
+        initialSelectedIds,
+        rules
+    )
+    // Avoid recalculating the preview and overwriting a frozen snapshot when
+    // only the note changes. Compare text before timestamps lose seconds.
+    val notesOnlyEdit = onSaveNotes != null && isNotesOnlyEdit(
+        original = initialShift,
+        isCopy = isCopy,
+        originalStartText = initialStart.format(editFormatter),
+        originalEndText = initialEnd.format(editFormatter),
+        startText = startText,
+        endText = endText,
+        role = role,
+        performanceType = performanceType,
+        initialNormalizedIds = initialNormalizedIds,
+        selectedNormalizedIds = normalizedSelectedIds
+    )
     LaunchedEffect(normalizedSelectedIds) {
         if (normalizedSelectedIds != selectedIds) selectedIds = normalizedSelectedIds
     }
@@ -267,7 +292,7 @@ internal fun ShiftEditorScreen(
             performanceType = performanceType
         )
     }
-    val preview = runCatching {
+    val preview = if (notesOnlyEdit && initialPay != null) initialPay else runCatching {
         draftShift?.let {
             calculator.calculate(worker.toDomain(), it.toDomain(), rules.map { rule -> rule.toDomain() }, normalizedSelectedIds)
         }
@@ -365,7 +390,11 @@ internal fun ShiftEditorScreen(
                                             }
                                             saving = true
                                             scope.launch {
-                                                val result = onSave(shiftsToSave, normalizedSelectedIds)
+                                                val result = if (notesOnlyEdit && onSaveNotes != null) {
+                                                    onSaveNotes(notes)
+                                                } else {
+                                                    onSave(shiftsToSave, normalizedSelectedIds)
+                                                }
                                                 saving = false
                                                 result.onSuccess { saved = true }
                                                     .onFailure { failure ->
@@ -687,7 +716,7 @@ internal fun ShiftEditorScreen(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        "Totale provvisorio",
+                                        if (notesOnlyEdit) "Totale storico" else "Totale provvisorio",
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                     PreviewBreakdownRow(
