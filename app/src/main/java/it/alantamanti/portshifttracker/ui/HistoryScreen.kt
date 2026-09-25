@@ -81,7 +81,7 @@ internal fun HistoryScreen(repository: PortRepository) {
                 append(historyCategory(row).label)
                 append(' ')
                 row.selectedRules.forEach {
-                    append(it.name)
+                    append(historicalAllowanceName(row, it))
                     append(' ')
                     append(it.code)
                     append(' ')
